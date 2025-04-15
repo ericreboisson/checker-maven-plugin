@@ -1,11 +1,13 @@
 package com.example.modulechecker.checkers;
 
+import com.example.modulechecker.renderers.ReportRenderer;
 import org.apache.maven.plugin.logging.Log;
 import org.apache.maven.project.MavenProject;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -13,55 +15,72 @@ import java.util.regex.Pattern;
 public class CommentedTagsChecker {
 
     private final Log log;
+    private final ReportRenderer renderer;
 
-    public CommentedTagsChecker(Log log) {
+    public CommentedTagsChecker(Log log, ReportRenderer renderer) {
         this.log = log;
+        this.renderer = renderer;
     }
 
     public String generateCommentedTagsReport(MavenProject project) {
-        StringBuilder markdown = new StringBuilder();
+        StringBuilder report = new StringBuilder();
 
         File pomFile = new File(project.getBasedir(), "pom.xml");
         if (!pomFile.exists()) {
-            log.warn("❌ Impossible de trouver le fichier pom.xml de " + project.getArtifactId());
-            return "";
+            String errorMsg = "❌ Impossible de trouver le fichier pom.xml de " + project.getArtifactId();
+            log.warn("[CommentedTagsChecker] " + errorMsg);
+            return renderer.renderError(errorMsg);
         }
 
         try {
             String content = Files.readString(pomFile.toPath());
 
-            // Trouve tous les blocs commentés <!-- ... -->
             Pattern commentPattern = Pattern.compile("<!--(.*?)-->", Pattern.DOTALL);
             Matcher matcher = commentPattern.matcher(content);
 
             boolean found = false;
-            markdown.append("❗ **Balises XML Maven commentées dans `pom.xml`** :\n\n");
-            markdown.append("| Contenu commenté |\n|------------------|\n");
+            report.append(renderer.renderTitle("🪧 Balises XML commentées détectées dans `pom.xml`"));
+            report.append(renderer.renderParagraph(
+                    "Ces balises sont **actuellement désactivées** dans le `pom.xml`. " +
+                    "Cela peut entraîner des comportements inattendus si elles étaient censées être actives."
+            ));
+
+            List<String[]> rows = new ArrayList<>();
 
             while (matcher.find()) {
-                String commentContent = matcher.group(1).trim();
+                String comment = matcher.group(1).trim();
 
-                // Vérifie si ça ressemble à une balise Maven typique
-                if (commentContent.matches("(?s).*<\\s*(dependencies|dependency|build|properties|plugins|dependencyManagement|pluginManagement)[^>]*>.*")) {
+                if (comment.matches("(?s).*<\\s*(modelVersion|parent|groupId|artifactId|version|packaging|name|description|url|inceptionYear|licenses|license|organization|developers|developer|scm|issueManagement|ciManagement|distributionManagement|repositories|repository|pluginRepositories|pluginRepository|modules|dependencies|dependency|dependencyManagement|build|plugins|plugin|pluginManagement|executions|execution|goals|resources|resource|testResources|testResource|reporting|reports|report|profiles|profile|properties)[^>]*>.*")) {
                     found = true;
-                    // Échappe les pipes pour éviter de casser le tableau
-                    String escaped = commentContent
+
+                    String escaped = comment
                             .replace("|", "\\|")
                             .replace("<", "&lt;")
                             .replace(">", "&gt;")
-                            .replace("\n", "<br/>")
-                            .replace("\r", "");                    markdown.append("| ").append(escaped).append(" |\n");
+                            .replace("\r", "")
+                            .replace("\n", "<br/>");
+
+                    rows.add(new String[]{
+                            "<details><summary>Afficher le bloc</summary><pre>" + escaped + "</pre></details>"
+                    });
                 }
             }
 
-            if (!found) {
-                return ""; // pas de tableau vide dans le rapport
+            if (found) {
+                report.append(renderer.renderTable(
+                        new String[]{"Bloc XML commenté"},
+                        rows.toArray(new String[0][])
+                ));
+            } else {
+                return ""; // pas de bloc significatif, pas de rendu
             }
 
         } catch (IOException e) {
-            log.error("❌ Erreur lors de la lecture du pom.xml : " + e.getMessage());
+            String errorMsg = "❌ Erreur lors de la lecture du pom.xml : " + e.getMessage();
+            log.error("[CommentedTagsChecker] " + errorMsg);
+            return renderer.renderError(errorMsg);
         }
 
-        return markdown.toString();
+        return report.toString();
     }
 }

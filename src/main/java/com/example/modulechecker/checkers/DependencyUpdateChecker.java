@@ -1,5 +1,6 @@
 package com.example.modulechecker.checkers;
 
+import com.example.modulechecker.renderers.ReportRenderer;
 import org.apache.maven.model.Dependency;
 import org.apache.maven.plugin.logging.Log;
 import org.eclipse.aether.RepositorySystem;
@@ -20,76 +21,75 @@ public class DependencyUpdateChecker {
     private final RepositorySystem repoSystem;
     private final RepositorySystemSession session;
     private final List<RemoteRepository> remoteRepositories;
+    private final ReportRenderer renderer;
 
     public DependencyUpdateChecker(Log log, RepositorySystem repoSystem,
                                    RepositorySystemSession session,
-                                   List<RemoteRepository> remoteRepositories) {
+                                   List<RemoteRepository> remoteRepositories,
+                                   ReportRenderer renderer) {
         this.log = log;
         this.repoSystem = repoSystem;
         this.session = session;
         this.remoteRepositories = remoteRepositories;
+        this.renderer = renderer;
     }
 
-
-    /**
-     * Vérifie si une version plus récente est disponible pour les dépendances d'un module
-     * et génère un rapport Markdown des dépendances obsolètes.
-     */
     public String generateOutdatedDependenciesReport(List<Dependency> dependencies) {
         StringBuilder report = new StringBuilder();
-        List<String> outdatedDependencies = checkForUpdates(dependencies);
+        List<String[]> outdated = checkForUpdates(dependencies);
 
-        if (!outdatedDependencies.isEmpty()) {
-            report.append("❗ **Dépendances obsolètes** :\n\n");
-            report.append("| GroupId | ArtifactId | Version actuelle | Version la plus récente |\n|---------|------------|-------------------|-------------------------|\n");
+        if (!outdated.isEmpty()) {
+            report.append(renderer.renderTitle("📦 Dépendances obsolètes détectées"));
+            report.append(renderer.renderParagraph("Certaines dépendances ont une version plus récente disponible dans les dépôts Maven. Il est recommandé de les mettre à jour pour bénéficier des dernières corrections de bugs, améliorations et correctifs de sécurité."));
 
-            for (String line : outdatedDependencies) {
-                String[] parts = line.split("[:\\[\\]➔]+");
-                report.append(String.format("| %s | %s | %s | %s |\n", parts[0].trim(), parts[1].trim(), parts[2].trim(), parts[3].trim()));
-            }
+            String[] headers = { "🏷️ Group ID", "📘 Artifact ID", "🕒 Version actuelle", "🚀 Dernière version stable" };
+            String[][] rows = outdated.toArray(new String[0][]);
+
+            report.append(renderer.renderTable(headers, rows));
+            report.append(renderer.renderInfo("🔄 Pensez à tester les mises à jour avant de les intégrer définitivement."));
         }
+
         return report.toString();
     }
-    public List<String> checkForUpdates(List dependencies) {
-        List<String> outdatedDeps = new ArrayList<>();
 
-        for (Object dependency : dependencies) {
-            if (dependency instanceof Dependency dep) {
-                try {
-                    if (dep.getVersion() == null || dep.getVersion().startsWith("${")) {
-                        continue; // skip properties or null versions
-                    }
+    private List<String[]> checkForUpdates(List<Dependency> dependencies) {
+        List<String[]> outdatedDeps = new ArrayList<>();
 
-                    DefaultArtifact artifact = new DefaultArtifact(
+        for (Dependency dep : dependencies) {
+            try {
+                if (dep.getVersion() == null || dep.getVersion().startsWith("${")) {
+                    continue;
+                }
+
+                DefaultArtifact artifact = new DefaultArtifact(
+                        dep.getGroupId(),
+                        dep.getArtifactId(),
+                        "jar",
+                        "[" + dep.getVersion() + ",)"
+                );
+
+                VersionRangeRequest rangeRequest = new VersionRangeRequest();
+                rangeRequest.setArtifact(artifact);
+                rangeRequest.setRepositories(remoteRepositories);
+
+                VersionRangeResult result = repoSystem.resolveVersionRange(session, rangeRequest);
+                Version latest = result.getVersions().stream()
+                        .filter(v -> !v.toString().contains("SNAPSHOT"))
+                        .max(Comparator.naturalOrder())
+                        .orElse(null);
+
+                if (latest != null && !latest.toString().equals(dep.getVersion())) {
+                    outdatedDeps.add(new String[] {
                             dep.getGroupId(),
                             dep.getArtifactId(),
-                            "jar",
-                            "[" + dep.getVersion() + ",)"
-                    );
-
-                    VersionRangeRequest rangeRequest = new VersionRangeRequest();
-                    rangeRequest.setArtifact(artifact);
-                    rangeRequest.setRepositories(remoteRepositories);
-
-                    VersionRangeResult result = repoSystem.resolveVersionRange(session, rangeRequest);
-                    List<Version> versions = result.getVersions();
-
-                    Version latest = versions.stream()
-                            .filter(v -> !v.toString().contains("SNAPSHOT"))
-                            .max(Comparator.naturalOrder())
-                            .orElse(null);
-
-                    if (latest != null && !latest.toString().equals(dep.getVersion())) {
-                        outdatedDeps.add(String.format("%s:%s [%s ➔ %s]",
-                                dep.getGroupId(), dep.getArtifactId(),
-                                dep.getVersion(), latest));
-                    }
-
-                } catch (Exception e) {
-                    log.warn("Impossible de vérifier " + dep.getGroupId() + ":" + dep.getArtifactId(), e);
+                            dep.getVersion(),
+                            latest.toString()
+                    });
                 }
-            }
 
+            } catch (Exception e) {
+                log.warn("❌ Impossible de vérifier " + dep.getGroupId() + ":" + dep.getArtifactId(), e);
+            }
         }
 
         return outdatedDeps;
