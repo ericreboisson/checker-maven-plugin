@@ -36,3 +36,6 @@ Ajoute ce plugin dans ton `pom.xml` parent ou exécute-le via la CLI Maven :
     </plugin>
   </plugins>
 </build>
+```
+
+mvn com.example:modulechecker:1.0.0:check-modules
