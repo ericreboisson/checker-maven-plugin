@@ -1,8 +1,4 @@
-package com.example.modulechecker;
 
-import com.example.modulechecker.checkers.*;
-import com.example.modulechecker.checkers.UnusedDependenciesChecker;
-import com.example.modulechecker.renderers.*;
 import org.apache.maven.plugins.annotations.*;
 import org.apache.maven.project.MavenProject;
 import org.apache.maven.plugin.AbstractMojo;
@@ -11,6 +7,11 @@ import org.apache.maven.plugin.logging.Log;
 import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.repository.RemoteRepository;
+import org.elitost.maven.plugin.checker.checkers.*;
+import org.elitost.maven.plugin.checker.renderers.HtmlReportRenderer;
+import org.elitost.maven.plugin.checker.renderers.MarkdownReportRenderer;
+import org.elitost.maven.plugin.checker.renderers.ReportRenderer;
+import org.elitost.maven.plugin.checker.renderers.TextReportRenderer;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -208,16 +209,26 @@ private UnusedDependenciesChecker unusedDependenciesChecker;
         return module.getArtifactId().equals(project.getArtifactId());
     }
 
-    private ReportRenderer resolveRenderer() {
+    ReportRenderer resolveRenderer() {
         String firstFormat = format != null && !format.isEmpty() ? format.get(0) : "markdown";
-        return switch (firstFormat.toLowerCase()) {
-            case "html" -> new HtmlReportRenderer();
-            case "text" -> new TextReportRenderer();
-            case "markdown" -> new MarkdownReportRenderer();
-            default -> {
+        String lowerFormat = firstFormat.toLowerCase();
+
+        ReportRenderer renderer;
+        switch (lowerFormat) {
+            case "html":
+                renderer = new HtmlReportRenderer();
+                break;
+            case "text":
+                renderer = new TextReportRenderer();
+                break;
+            case "markdown":
+                renderer = new MarkdownReportRenderer();
+                break;
+            default:
                 log.warn("Format inconnu '" + firstFormat + "', utilisation de Markdown par défaut.");
-                yield new MarkdownReportRenderer();
-            }
-        };
+                renderer = new MarkdownReportRenderer();
+                break;
+        }
+        return renderer;
     }
 }

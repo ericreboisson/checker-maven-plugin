@@ -1,4 +1,4 @@
-package com.example.modulechecker.renderers;
+package org.elitost.maven.plugin.checker.renderers;
 
 public interface ReportRenderer {
     String renderTitle(String title);
@@ -7,4 +7,9 @@ public interface ReportRenderer {
     String renderWarning(String text);
     String renderInfo(String text);
     String renderError(String text);
+    /**
+     * Génère une ancre HTML/Markdown pour permettre la navigation dans le document.
+     * Ex : <a name="commented-tags"></a> ou [//]: # (commented-tags)
+     */
+    String renderAnchor(String id);
 }

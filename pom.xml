@@ -8,12 +8,29 @@
   <version>1.0.0</version>
   <packaging>maven-plugin</packaging>
 
-  <name>Module Checker Maven Plugin</name>
+  <name>Checker Maven Plugin</name>
+  <description>Plugin Maven pour vérifier la présence, la cohérence et la déclaration des modules dans un projet multi-modules.</description>
+  <url>https://github.com/ericreboisson/maven-checker-plugin</url>
+
+  <developers>
+    <developer>
+      <id>eric.reboisson</id>
+      <name>Eric Reboisson</name>
+      <email>eric.reboisson@laposte.net</email>
+    </developer>
+  </developers>
+
+  <scm>
+    <url>https://github.com/ericreboisson/maven-checker-plugin</url>
+    <connection>scm:git:git@github.com:ericreboisson/maven-checker-plugin.git</connection>
+    <developerConnection>scm:git:ssh://github.com/ericreboisson/maven-checker-plugin.git</developerConnection>
+    <tag>HEAD</tag>
+  </scm>
 
   <properties>
     <!-- Java -->
-    <maven.compiler.source>16</maven.compiler.source>
-    <maven.compiler.target>16</maven.compiler.target>
+    <maven.compiler.source>11</maven.compiler.source>
+    <maven.compiler.target>11</maven.compiler.target>
 
     <!-- Maven -->
     <maven.version>3.9.0</maven.version>
@@ -32,6 +49,8 @@
     <!-- Test -->
     <junit.jupiter.version>5.10.0</junit.jupiter.version>
     <mockito.version>5.12.0</mockito.version>
+    <logback-classic.version>1.5.18</logback-classic.version>
+    <slf4j-api.version>1.7.32</slf4j-api.version>
   </properties>
 
   <dependencies>
@@ -40,6 +59,7 @@
       <groupId>org.apache.maven</groupId>
       <artifactId>maven-plugin-api</artifactId>
       <version>${maven.version}</version>
+      <scope>provided</scope>
     </dependency>
 
     <dependency>
@@ -111,12 +131,12 @@
     <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>
-      <version>1.7.32</version>
+      <version>${slf4j-api.version}</version>
     </dependency>
     <dependency>
       <groupId>ch.qos.logback</groupId>
       <artifactId>logback-classic</artifactId>
-      <version>1.2.6</version>
+      <version>${logback-classic.version}</version>
     </dependency>
 
 
@@ -148,4 +168,14 @@
       </plugin>
     </plugins>
   </build>
+
+  <reporting>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-plugin-plugin</artifactId>
+        <version>3.9.0</version>
+      </plugin>
+    </plugins>
+  </reporting>
 </project>

@@ -1,4 +1,4 @@
-package com.example.modulechecker.renderers;
+package org.elitost.maven.plugin.checker.renderers;
 
 /**
  * Renderer simple pour les rapports en texte brut (ex. console ou .txt).
@@ -67,6 +67,12 @@ public class TextReportRenderer implements ReportRenderer {
     @Override
     public String renderError(String text) {
         return "❌ ERREUR : " + text + "\n";
+    }
+
+    @Override
+    public String renderAnchor(String id) {
+        // En mode texte, une ancre peut juste être un marqueur visuel
+        return "[[" + id + "]]\n";
     }
 
     private String pad(String text, int width) {

@@ -1,5 +1,5 @@
 // === Implémentation Markdown ===
-package com.example.modulechecker.renderers;
+package org.elitost.maven.plugin.checker.renderers;
 
 public class MarkdownReportRenderer implements ReportRenderer {
     @Override
@@ -43,5 +43,10 @@ public class MarkdownReportRenderer implements ReportRenderer {
     @Override
     public String renderError(String text) {
         return "> ❌ " + text + "\n\n";
+    }
+
+    @Override
+    public String renderAnchor(String id) {
+        return "[//]: # (" + id + ")\n";
     }
 }

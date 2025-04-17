@@ -1,5 +1,5 @@
 // === Implémentation HTML ===
-package com.example.modulechecker.renderers;
+package org.elitost.maven.plugin.checker.renderers;
 
 public class HtmlReportRenderer implements ReportRenderer {
     @Override
@@ -43,5 +43,10 @@ public class HtmlReportRenderer implements ReportRenderer {
     @Override
     public String renderError(String text) {
         return "<div class='error'>❌ " + text + "</div>\n";
+    }
+
+    @Override
+    public String renderAnchor(String id) {
+        return "<a name=\"" + id + "\"></a>\n";
     }
 }
