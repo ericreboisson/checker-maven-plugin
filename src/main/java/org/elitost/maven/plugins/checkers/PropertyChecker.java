@@ -1,6 +1,6 @@
-package org.elitost.maven.plugin.checker.checkers;
+package org.elitost.maven.plugins.checkers;
 
-import org.elitost.maven.plugin.checker.renderers.ReportRenderer;
+import org.elitost.maven.plugins.renderers.ReportRenderer;
 import org.apache.maven.plugin.logging.Log;
 import org.apache.maven.project.MavenProject;
 
@@ -31,7 +31,7 @@ public class PropertyChecker {
      */
     public String generatePropertiesCheckReport(MavenProject project, List<String> propertiesToCheck) {
         StringBuilder report = new StringBuilder();
-        report.append(renderer.renderTitle("🔧 Vérification des Propriétés dans `" + project.getArtifactId() + "`"));
+        report.append(renderer.renderHeader3("🔧 Vérification des Propriétés dans `" + project.getArtifactId() + "`"));
 
         try {
             Properties props = project.getProperties();

@@ -1,0 +1,176 @@
+/* Global body styles */
+body {
+    font-family: 'Roboto', sans-serif; /* Police moderne */
+    color: #2b2d42; /* Couleur de texte légèrement plus sombre */
+    margin: 20px;
+    line-height: 1.55; /* Espace entre les lignes un peu plus resserré */
+    background-color: #f0f2f5; /* Arrière-plan doux */
+}
+
+/* h1 style */
+h1 {
+    background-color: #1e2a47; /* Bleu profond */
+    color: #f1f3f5; /* Blanc cassé */
+    font-size: 1.8em; /* Taille réduite */
+    padding: 0.8em 1.6em;
+    margin: 2.5em 0 1.5em 0;
+    border: none;
+    border-radius: 10px; /* Moins arrondi */
+    font-family: 'Segoe UI', Roboto, sans-serif;
+    font-weight: 700;
+    text-align: center;
+    letter-spacing: 1px;
+    line-height: 1.3;
+
+    background-image: linear-gradient(135deg, #1e2a47, #3e4c75);
+
+    box-shadow:
+            0 4px 10px rgba(0, 0, 0, 0.1),
+            inset 0 1px 4px rgba(255, 255, 255, 0.2),
+            inset 0 -1px 0 rgba(0, 0, 0, 0.05);
+}
+
+/* h2 style */
+h2 {
+    background-color: #f1f3f5;
+    color: #2d3a3f;
+    font-size: 1.3em; /* Taille réduite */
+    padding: 0.5em 1em;
+    margin: 1.8em 0 1em 0;
+    border: 2px solid #6c5ce7;
+    border-radius: 5px; /* Un peu plus subtil */
+    font-family: 'Segoe UI', Roboto, sans-serif;
+    font-weight: 500;
+    text-align: center;
+    line-height: 1.5;
+
+    box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.4),
+            inset 0 -1px 0 rgba(0, 0, 0, 0.1),
+            0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* h3 style */
+h3 {
+    background-color: #ffffff; /* Fond neutre pour ne pas trop distraire du contenu */
+    color: #374151; /* Gris foncé pour rester harmonieux avec le corps du texte */
+    font-size: 1.1em; /* Taille légèrement plus petite que h2 */
+    padding: 0.5em 1em; /* Un peu moins d'espacement que h2 */
+    margin: 1.5em 0 1em 0;
+    border-left: 3px solid #a78bfa; /* Violet pastel pour rester en harmonie avec h2 */
+    border-radius: 4px; /* Arrondi léger, en accord avec h1 et h2 */
+    font-family: 'Segoe UI', Roboto, sans-serif;
+    font-weight: 600; /* Un poids intermédiaire entre h1 et h2 */
+    text-align: left; /* Texte aligné à gauche pour plus de lisibilité */
+    line-height: 1.45;
+
+    /* Ombre légère pour un effet de profondeur */
+    box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.3),
+            inset 0 -1px 0 rgba(0, 0, 0, 0.05),
+            0 1px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Code blocks - pre */
+pre {
+    background-color: #2e3440;
+    padding: 0.8em;
+    border-radius: 8px;
+    font-size: 15px; /* Légèrement plus petit */
+    font-family: 'Courier New', Courier, monospace;
+    color: #e5e9f0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow: auto;
+}
+
+/* List styles */
+ul {
+    list-style-type: none;
+    padding-left: 0;
+}
+
+ul li {
+    padding: 10px;
+    border-bottom: 1px solid #ddd;
+    font-size: 1.05em; /* Taille un peu réduite */
+    background-color: #ffffff;
+    transition: background-color 0.3s ease-in-out;
+}
+
+ul li:hover {
+    background-color: #f6f7f8;
+}
+
+/* Table styles */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+}
+
+table th, table td {
+    padding: 10px;
+    text-align: left;
+    border: 1px solid #e4e6e9;
+}
+
+table th {
+    background-color: #3b3f50;
+    color: #ffffff;
+    font-weight: bold;
+}
+
+table tr:nth-child(even) {
+    background-color: #f5f7fa;
+}
+
+table tr:hover {
+    background-color: #edf2f7;
+}
+
+/* Section styles */
+section {
+    margin-top: 30px;
+    padding: 20px;
+    background-color: #ffffff;
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+section h3 {
+    margin-top: 0;
+    color: #1f2937;
+    font-size: 1.4em; /* Taille un peu réduite */
+}
+
+/* Footer styles */
+footer {
+    margin-top: 40px;
+    padding-top: 20px;
+    text-align: center;
+    font-size: 13px; /* Taille réduite */
+    color: #777;
+    font-family: 'Segoe UI', sans-serif;
+    border-top: 1px solid #e4e4e4;
+}
+
+footer a {
+    color: #4c6b8c;
+    text-decoration: none;
+    transition: color 0.3s ease;
+}
+
+footer a:hover {
+    color: #2d3a3f;
+}
+
+/* Enhancements for better UX */
+a {
+    color: #1d4ed8;
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}

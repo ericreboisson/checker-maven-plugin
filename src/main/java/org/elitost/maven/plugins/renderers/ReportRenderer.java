@@ -1,7 +1,9 @@
-package org.elitost.maven.plugin.checker.renderers;
+package org.elitost.maven.plugins.renderers;
 
 public interface ReportRenderer {
-    String renderTitle(String title);
+    String renderHeader1(String title);
+    String renderHeader2(String title);
+    String renderHeader3(String title);
     String renderParagraph(String text);
     String renderTable(String[] headers, String[][] rows);
     String renderWarning(String text);

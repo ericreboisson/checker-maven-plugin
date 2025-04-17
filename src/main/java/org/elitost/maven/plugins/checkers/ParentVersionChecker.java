@@ -1,6 +1,6 @@
-package org.elitost.maven.plugin.checker.checkers;
+package org.elitost.maven.plugins.checkers;
 
-import org.elitost.maven.plugin.checker.renderers.ReportRenderer;
+import org.elitost.maven.plugins.renderers.ReportRenderer;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.Parent;
 import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
@@ -82,7 +82,7 @@ public class ParentVersionChecker {
 
         if (latestVersion != null && !latestVersion.equals(currentVersion)) {
             StringBuilder report = new StringBuilder();
-            report.append(renderer.renderTitle("👪 Version obsolète du parent détectée"));
+            report.append(renderer.renderHeader3("👪 Version obsolète du parent détectée"));
             report.append(renderer.renderParagraph(
                     "Le fichier `pom.xml` utilise une version du parent qui n'est pas la plus récente disponible."));
 

@@ -1,6 +1,6 @@
-package org.elitost.maven.plugin.checker.checkers;
+package org.elitost.maven.plugins.checkers;
 
-import org.elitost.maven.plugin.checker.renderers.ReportRenderer;
+import org.elitost.maven.plugins.renderers.ReportRenderer;
 import org.apache.maven.plugin.logging.Log;
 import org.apache.maven.project.MavenProject;
 
@@ -42,7 +42,7 @@ public class ModuleChecker {
         String artifactId = project.getArtifactId();
         StringBuilder report = new StringBuilder();
 
-        report.append(renderer.renderTitle("🧩 Vérification des modules du projet `" + artifactId + "`"));
+        report.append(renderer.renderHeader3("🧩 Vérification des modules du projet `" + artifactId + "`"));
 
         try {
             List<String> expectedModules = getExpectedModules(artifactId);
@@ -65,7 +65,7 @@ public class ModuleChecker {
 
                 report.append(renderer.renderTable(new String[]{"📦 Module manquant"}, rows));
                 report.append(renderer.renderWarning(
-                        "Vérifie que chaque module est présent sur le disque **et** déclaré dans la section `<modules>` du `pom.xml` parent."
+                        "Vérifie que chaque module est présent sur le disque et déclaré dans la section `<modules>` du `pom.xml` parent."
                 ));
             }
 

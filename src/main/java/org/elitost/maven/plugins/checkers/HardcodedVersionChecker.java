@@ -1,6 +1,6 @@
-package org.elitost.maven.plugin.checker.checkers;
+package org.elitost.maven.plugins.checkers;
 
-import org.elitost.maven.plugin.checker.renderers.ReportRenderer;
+import org.elitost.maven.plugins.renderers.ReportRenderer;
 import org.apache.maven.model.Dependency;
 import org.apache.maven.plugin.logging.Log;
 import org.apache.maven.project.MavenProject;
@@ -57,7 +57,7 @@ public class HardcodedVersionChecker {
 
         // Rapport
         report.append(renderer.renderAnchor(ANCHOR_ID));
-        report.append(renderer.renderTitle("🧱 Versions codées en dur détectées"));
+        report.append(renderer.renderHeader3("🧱 Versions codées en dur détectées"));
         report.append(renderer.renderParagraph(
                 "Les dépendances suivantes utilisent une version définie en dur dans le `pom.xml`, au lieu d’une propriété `${...}`.\n" +
                         "Cela nuit à la centralisation et à la maintenabilité des versions."));
@@ -78,7 +78,7 @@ public class HardcodedVersionChecker {
 
         report.append(renderer.renderTable(headers, rows));
         report.append(renderer.renderParagraph(
-                "💡 *Conseil : remplace chaque version codée en dur par une propriété Maven définie dans la section `<properties>` du parent ou d’un BOM.*"));
+                "💡 Conseil : remplace chaque version codée en dur par une propriété Maven définie dans la section `<properties>` du parent ou d’un BOM."));
 
         return report.toString();
     }

@@ -1,3 +1,4 @@
+package org.elitost.maven.plugins;
 
 import org.apache.maven.plugins.annotations.*;
 import org.apache.maven.project.MavenProject;
@@ -7,20 +8,18 @@ import org.apache.maven.plugin.logging.Log;
 import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.repository.RemoteRepository;
-import org.elitost.maven.plugin.checker.checkers.*;
-import org.elitost.maven.plugin.checker.renderers.HtmlReportRenderer;
-import org.elitost.maven.plugin.checker.renderers.MarkdownReportRenderer;
-import org.elitost.maven.plugin.checker.renderers.ReportRenderer;
-import org.elitost.maven.plugin.checker.renderers.TextReportRenderer;
+import org.elitost.maven.plugins.checkers.*;
+import org.elitost.maven.plugins.renderers.HtmlReportRenderer;
+import org.elitost.maven.plugins.renderers.MarkdownReportRenderer;
+import org.elitost.maven.plugins.renderers.ReportRenderer;
+import org.elitost.maven.plugins.renderers.TextReportRenderer;
 
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
-@Mojo(name = "check-modules", defaultPhase = LifecyclePhase.NONE)
-@Execute(goal = "check-modules")
+@Mojo(name = "check", defaultPhase = LifecyclePhase.NONE)
+@Execute(goal = "check")
 public class ModuleCheckerMojo extends AbstractMojo {
 
     @Parameter(property = "format", defaultValue = "html")
@@ -41,7 +40,7 @@ public class ModuleCheckerMojo extends AbstractMojo {
     @Parameter(defaultValue = "${project}")
     private MavenProject project;
 
-    @Parameter(required = true)
+    @Parameter
     private List<String> propertiesToCheck;
 
     private ModuleChecker moduleChecker;
@@ -51,7 +50,7 @@ public class ModuleCheckerMojo extends AbstractMojo {
     private DependencyUpdateChecker updateChecker;
     private CommentedTagsChecker commentedTagsChecker;
     private RedundantPropertiesChecker redundantChecker;
-private UnusedDependenciesChecker unusedDependenciesChecker;
+    private UnusedDependenciesChecker unusedDependenciesChecker;
 
     private Log log;
     private boolean runAll;
@@ -67,7 +66,6 @@ private UnusedDependenciesChecker unusedDependenciesChecker;
 
         initCheckers();
 
-        // Initialisation du renderer
         ReportRenderer renderer = resolveRenderer();
 
         runAll = checkersToRun == null || checkersToRun.isEmpty();
@@ -89,9 +87,9 @@ private UnusedDependenciesChecker unusedDependenciesChecker;
 
     private void initCheckers() {
         moduleChecker = new ModuleChecker(log, resolveRenderer());
-        parentChecker = new ParentVersionChecker(log, repoSystem, repoSession, remoteRepositories,resolveRenderer());
-        propertyChecker = new PropertyChecker(log,resolveRenderer());
-        hardcodedChecker = new HardcodedVersionChecker(log,resolveRenderer());
+        parentChecker = new ParentVersionChecker(log, repoSystem, repoSession, remoteRepositories, resolveRenderer());
+        propertyChecker = new PropertyChecker(log, resolveRenderer());
+        hardcodedChecker = new HardcodedVersionChecker(log, resolveRenderer());
         updateChecker = new DependencyUpdateChecker(log, repoSystem, repoSession, remoteRepositories, resolveRenderer());
         commentedTagsChecker = new CommentedTagsChecker(log, resolveRenderer());
         redundantChecker = new RedundantPropertiesChecker(log, resolveRenderer());
@@ -99,6 +97,10 @@ private UnusedDependenciesChecker unusedDependenciesChecker;
     }
 
     private void enrichPropertiesFromSystem() {
+        if (propertiesToCheck == null) {
+            propertiesToCheck = new ArrayList<>();
+        }
+
         String sysProp = System.getProperty("propertiesToCheck");
         if (sysProp != null && !sysProp.isEmpty()) {
             propertiesToCheck.addAll(Arrays.asList(sysProp.split(",")));
@@ -115,7 +117,7 @@ private UnusedDependenciesChecker unusedDependenciesChecker;
 
     private String generateReportContent(MavenProject module, ReportRenderer renderer) {
         StringBuilder content = new StringBuilder();
-        content.append(renderer.renderTitle("Module : " + module.getArtifactId()));
+        content.append(renderer.renderHeader2("Module : " + module.getArtifactId()));
 
         if (isTopLevelProject(module) && (runAll || checkersToRun.contains("module"))) {
             content.append(moduleChecker.generateModuleCheckReport(module)).append("\n");
@@ -166,29 +168,18 @@ private UnusedDependenciesChecker unusedDependenciesChecker;
 
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
             if (ext.equals("md")) {
-                writer.write("# Rapport de Vérification des Modules\n\n");
+                writer.write("# Rapport de Vérification\n\n");
                 writer.write(content);
             } else if (ext.equals("text")) {
                 writer.write(content);
             } else if (ext.equals("html")) {
-                writer.write("<html>\n<head>\n<title>Rapport de Vérification des Modules</title>\n");
-                writer.write("<style>\n");
-                writer.write("/* Global Styles */\n");
-                writer.write("body { font-family: Arial, sans-serif; color: #333; margin: 20px; line-height: 1.6; }\n");
-                writer.write("h1 { font-size: 28px; color: #2a3d66; border-bottom: 2px solid #2a3d66; padding-bottom: 10px; margin-bottom: 20px; }\n");
-                writer.write("h2 { font-size: 24px; color: #3a5274; margin-top: 20px; border-bottom: 1px solid #ccc; padding-bottom: 5px; }\n");
-                writer.write("h3 { font-size: 20px; color: #4a6a92; }\n");
-                writer.write("pre { background-color: #f5f5f5; padding: 10px; border-radius: 5px; font-size: 14px; white-space: pre-wrap; word-wrap: break-word; }\n");
-                writer.write("ul { list-style: none; padding-left: 0; }\n");
-                writer.write("ul li { padding: 8px; border-bottom: 1px solid #e3e3e3; }\n");
-                writer.write("table { width: 100%; border-collapse: collapse; margin-top: 20px; }\n");
-                writer.write("table th, table td { padding: 12px; text-align: left; border: 1px solid #e3e3e3; }\n");
-                writer.write("table th { background-color: #f2f2f2; font-weight: bold; }\n");
-                writer.write("section { margin-top: 20px; padding: 20px; background-color: #f9f9f9; border-radius: 8px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }\n");
-                writer.write("section h3 { margin-top: 0; }\n");
-                writer.write("footer { margin-top: 40px; padding-top: 20px; text-align: center; font-size: 14px; color: #777; }\n");
-                writer.write("</style>\n</head>\n<body>\n");
-                writer.write("<h1>Rapport de Vérification des Modules</h1>\n");
+                // Lecture du fichier style.css depuis les ressources
+                String cssContent = readResourceAsString("assets/css/style.css");
+
+                writer.write("<html>\n<head>\n<title>Rapport de Vérification</title>\n");
+                writer.write("<style>\n" + cssContent + "\n</style>\n");
+                writer.write("</head>\n<body>\n");
+                writer.write("<h1>Rapport de Vérification</h1>\n");
                 writer.write(content);
                 writer.write("</body>\n</html>");
             }
@@ -199,6 +190,15 @@ private UnusedDependenciesChecker unusedDependenciesChecker;
 
         log.info("📄 Rapport global généré : " + file.getAbsolutePath());
         log.info("Vous pouvez consulter le rapport ici : file://" + file.getAbsolutePath());
+    }
+
+    private String readResourceAsString(String path) throws IOException {
+        try (InputStream is = getClass().getClassLoader().getResourceAsStream(path)) {
+            if (is == null) {
+                throw new FileNotFoundException("Le fichier de ressource '" + path + "' est introuvable dans le classpath.");
+            }
+            return new String(is.readAllBytes(), StandardCharsets.UTF_8);
+        }
     }
 
     private boolean isParentPom() {
@@ -213,22 +213,17 @@ private UnusedDependenciesChecker unusedDependenciesChecker;
         String firstFormat = format != null && !format.isEmpty() ? format.get(0) : "markdown";
         String lowerFormat = firstFormat.toLowerCase();
 
-        ReportRenderer renderer;
         switch (lowerFormat) {
             case "html":
-                renderer = new HtmlReportRenderer();
-                break;
+                return new HtmlReportRenderer();
             case "text":
-                renderer = new TextReportRenderer();
-                break;
+                return new TextReportRenderer();
             case "markdown":
-                renderer = new MarkdownReportRenderer();
-                break;
+            case "md":
+                return new MarkdownReportRenderer();
             default:
                 log.warn("Format inconnu '" + firstFormat + "', utilisation de Markdown par défaut.");
-                renderer = new MarkdownReportRenderer();
-                break;
+                return new MarkdownReportRenderer();
         }
-        return renderer;
     }
 }

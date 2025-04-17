@@ -1,6 +1,6 @@
-package org.elitost.maven.plugin.checker.checkers;
+package org.elitost.maven.plugins.checkers;
 
-import org.elitost.maven.plugin.checker.renderers.ReportRenderer;
+import org.elitost.maven.plugins.renderers.ReportRenderer;
 import org.apache.maven.model.Dependency;
 import org.apache.maven.plugin.logging.Log;
 import org.eclipse.aether.RepositorySystem;
@@ -69,7 +69,7 @@ public class DependencyUpdateChecker {
 
         if (!outdated.isEmpty()) {
             report.append(renderer.renderAnchor(ANCHOR_ID));
-            report.append(renderer.renderTitle("📦 Dépendances obsolètes détectées"));
+            report.append(renderer.renderHeader3("📦 Dépendances obsolètes détectées"));
             report.append(renderer.renderParagraph(
                     "Certaines dépendances ont une version plus récente disponible dans les dépôts Maven. " +
                             "Il est recommandé de les mettre à jour pour bénéficier des dernières corrections de bugs, " +

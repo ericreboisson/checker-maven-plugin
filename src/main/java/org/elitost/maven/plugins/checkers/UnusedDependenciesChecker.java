@@ -1,6 +1,6 @@
-package org.elitost.maven.plugin.checker.checkers;
+package org.elitost.maven.plugins.checkers;
 
-import org.elitost.maven.plugin.checker.renderers.ReportRenderer;
+import org.elitost.maven.plugins.renderers.ReportRenderer;
 import org.apache.maven.model.Dependency;
 import org.apache.maven.plugin.logging.Log;
 import org.apache.maven.project.MavenProject;
@@ -80,12 +80,12 @@ public class UnusedDependenciesChecker {
      */
     private String renderReport(MavenProject project, List<Dependency> unusedDeps) {
         StringBuilder report = new StringBuilder();
-        report.append(renderer.renderTitle("🔍 Dépendances non utilisées dans `" + project.getArtifactId() + "`"));
+        report.append(renderer.renderHeader3("🔍 Dépendances non utilisées dans `" + project.getArtifactId() + "`"));
 
         if (unusedDeps.isEmpty()) {
-            report.append(renderer.renderInfo("✅ Toutes les dépendances semblent utilisées."));
+            report.append(renderer.renderInfo("Toutes les dépendances semblent utilisées."));
         } else {
-            report.append(renderer.renderWarning("⚠️ Dépendances potentiellement inutilisées détectées :"));
+            report.append(renderer.renderWarning("Dépendances potentiellement inutilisées détectées :"));
 
             String[][] rows = unusedDeps.stream()
                     .map(dep -> new String[]{

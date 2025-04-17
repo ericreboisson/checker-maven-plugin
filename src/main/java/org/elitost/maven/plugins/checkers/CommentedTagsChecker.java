@@ -1,6 +1,6 @@
-package org.elitost.maven.plugin.checker.checkers;
+package org.elitost.maven.plugins.checkers;
 
-import org.elitost.maven.plugin.checker.renderers.ReportRenderer;
+import org.elitost.maven.plugins.renderers.ReportRenderer;
 import org.apache.maven.plugin.logging.Log;
 import org.apache.maven.project.MavenProject;
 
@@ -62,7 +62,7 @@ public class CommentedTagsChecker {
 
             StringBuilder report = new StringBuilder();
             report.append(renderer.renderAnchor("commented-tags"));
-            report.append(renderer.renderTitle("🪧 Balises XML commentées détectées dans `pom.xml`"));
+            report.append(renderer.renderHeader3("🪧 Balises XML commentées détectées dans `pom.xml`"));
             report.append(renderer.renderParagraph(
                     "Les balises ci-dessous sont actuellement désactivées dans le `pom.xml`. " +
                             "Cela peut entraîner des comportements inattendus si elles étaient censées être actives."

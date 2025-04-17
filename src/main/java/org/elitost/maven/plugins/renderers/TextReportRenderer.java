@@ -1,4 +1,4 @@
-package org.elitost.maven.plugin.checker.renderers;
+package org.elitost.maven.plugins.renderers;
 
 /**
  * Renderer simple pour les rapports en texte brut (ex. console ou .txt).
@@ -6,9 +6,20 @@ package org.elitost.maven.plugin.checker.renderers;
 public class TextReportRenderer implements ReportRenderer {
 
     @Override
-    public String renderTitle(String title) {
+    public String renderHeader1(String title) {
         return "\n=== " + title + " ===\n\n";
     }
+
+    @Override
+    public String renderHeader2(String title) {
+        return "\n=== " + title + " ===\n\n";
+    }
+
+    @Override
+    public String renderHeader3(String title) {
+        return "\n=== " + title + " ===\n\n";
+    }
+
 
     @Override
     public String renderParagraph(String text) {

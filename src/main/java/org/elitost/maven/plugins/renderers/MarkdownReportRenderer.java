@@ -1,11 +1,22 @@
 // === Implémentation Markdown ===
-package org.elitost.maven.plugin.checker.renderers;
+package org.elitost.maven.plugins.renderers;
 
 public class MarkdownReportRenderer implements ReportRenderer {
     @Override
-    public String renderTitle(String title) {
+    public String renderHeader1(String title) {
         return "### " + title + "\n\n";
     }
+
+    @Override
+    public String renderHeader2(String title) {
+        return "### " + title + "\n\n";
+    }
+
+    @Override
+    public String renderHeader3(String title) {
+        return "### " + title + "\n\n";
+    }
+
 
     @Override
     public String renderParagraph(String text) {

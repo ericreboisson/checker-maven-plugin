@@ -1,6 +1,6 @@
-package org.elitost.maven.plugin.checker.checkers;
+package org.elitost.maven.plugins.checkers;
 
-import org.elitost.maven.plugin.checker.renderers.ReportRenderer;
+import org.elitost.maven.plugins.renderers.ReportRenderer;
 import org.apache.maven.model.Model;
 import org.apache.maven.plugin.logging.Log;
 import org.apache.maven.project.MavenProject;
@@ -97,9 +97,9 @@ public class RedundantPropertiesChecker {
 
     private String renderReport(String artifactId, List<String[]> unusedProperties) {
         StringBuilder report = new StringBuilder();
-        report.append(renderer.renderTitle("🧹 Propriétés Redondantes dans `" + artifactId + "`"));
+        report.append(renderer.renderHeader3("🧹 Propriétés Redondantes dans `" + artifactId + "`"));
         report.append(renderer.renderParagraph(
-                "Les propriétés suivantes sont définies dans ce module mais ne sont **référencées dans aucun `pom.xml`** du projet :"
+                "Les propriétés suivantes sont définies dans ce module mais ne sont référencées dans aucun `pom.xml` du projet :"
         ));
         report.append(renderer.renderTable(new String[]{"Nom de la propriété"}, unusedProperties.toArray(new String[0][])));
         return report.toString();
