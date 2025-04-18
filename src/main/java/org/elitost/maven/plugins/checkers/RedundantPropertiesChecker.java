@@ -49,7 +49,7 @@ public class RedundantPropertiesChecker {
             String propertyReference = "${" + property.trim() + "}";
             if (!combinedPomContent.contains(propertyReference)) {
                 log.warn("⚠️ [RedundantPropertiesChecker] Propriété non utilisée : " + property + " (définie dans " + artifactId + ")");
-                unusedProperties.add(new String[]{"`" + property + "`"});
+                unusedProperties.add(new String[]{property}); // ⬅️ ici, plus de backticks
             }
         }
 

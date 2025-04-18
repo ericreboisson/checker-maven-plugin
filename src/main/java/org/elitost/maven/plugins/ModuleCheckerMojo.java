@@ -43,7 +43,7 @@ public class ModuleCheckerMojo extends AbstractMojo {
     @Parameter
     private List<String> propertiesToCheck;
 
-    private ModuleChecker moduleChecker;
+    private ExpectedModulesChecker expectedModulesChecker;
     private ParentVersionChecker parentChecker;
     private PropertyChecker propertyChecker;
     private HardcodedVersionChecker hardcodedChecker;
@@ -51,6 +51,9 @@ public class ModuleCheckerMojo extends AbstractMojo {
     private CommentedTagsChecker commentedTagsChecker;
     private RedundantPropertiesChecker redundantChecker;
     private UnusedDependenciesChecker unusedDependenciesChecker;
+    private UrlChecker urlChecker;
+    private RedefinedDependencyVersionChecker redefinitionChecker;
+
 
     private Log log;
     private boolean runAll;
@@ -86,7 +89,7 @@ public class ModuleCheckerMojo extends AbstractMojo {
     }
 
     private void initCheckers() {
-        moduleChecker = new ModuleChecker(log, resolveRenderer());
+        expectedModulesChecker = new ExpectedModulesChecker(log, resolveRenderer());
         parentChecker = new ParentVersionChecker(log, repoSystem, repoSession, remoteRepositories, resolveRenderer());
         propertyChecker = new PropertyChecker(log, resolveRenderer());
         hardcodedChecker = new HardcodedVersionChecker(log, resolveRenderer());
@@ -94,6 +97,8 @@ public class ModuleCheckerMojo extends AbstractMojo {
         commentedTagsChecker = new CommentedTagsChecker(log, resolveRenderer());
         redundantChecker = new RedundantPropertiesChecker(log, resolveRenderer());
         unusedDependenciesChecker = new UnusedDependenciesChecker(log, resolveRenderer());
+        urlChecker = new UrlChecker(log, resolveRenderer());
+        redefinitionChecker = new RedefinedDependencyVersionChecker(log, resolveRenderer());
     }
 
     private void enrichPropertiesFromSystem() {
@@ -119,8 +124,8 @@ public class ModuleCheckerMojo extends AbstractMojo {
         StringBuilder content = new StringBuilder();
         content.append(renderer.renderHeader2("Module : " + module.getArtifactId()));
 
-        if (isTopLevelProject(module) && (runAll || checkersToRun.contains("module"))) {
-            content.append(moduleChecker.generateModuleCheckReport(module)).append("\n");
+        if (isTopLevelProject(module) && (runAll || checkersToRun.contains("ExpectedModules"))) {
+            content.append(expectedModulesChecker.generateModuleCheckReport(module)).append("\n");
         }
 
         if (runAll || checkersToRun.contains("parent")) {
@@ -129,6 +134,11 @@ public class ModuleCheckerMojo extends AbstractMojo {
 
         if (isTopLevelProject(module) && (runAll || checkersToRun.contains("property"))) {
             content.append(propertyChecker.generatePropertiesCheckReport(module, propertiesToCheck)).append("\n");
+        }
+
+        if (isTopLevelProject(module) && (runAll || checkersToRun.contains("urls"))) {
+
+            content.append(urlChecker.generateUrlCheckReport(module)).append("\n");
         }
 
         runCommonCheckers(module, renderer, content);
@@ -155,6 +165,10 @@ public class ModuleCheckerMojo extends AbstractMojo {
 
         if (runAll || checkersToRun.contains("usage")) {
             content.append(unusedDependenciesChecker.generateReport(module)).append("\n");
+        }
+
+        if (runAll || checkersToRun.contains("redefinition")) {
+            content.append(redefinitionChecker.generateRedefinitionReport(module)).append("\n");
         }
     }
 
@@ -226,4 +240,5 @@ public class ModuleCheckerMojo extends AbstractMojo {
                 return new MarkdownReportRenderer();
         }
     }
+
 }

@@ -44,20 +44,18 @@ public class HardcodedVersionChecker {
      * @return une chaîne contenant le rapport formaté (Markdown, HTML, etc.)
      */
     public String generateHardcodedVersionReport(MavenProject project) {
-        StringBuilder report = new StringBuilder();
         List<Dependency> hardcodedDeps = findHardcodedDependencies(project);
 
         if (hardcodedDeps.isEmpty()) {
-            String message = String.format("✅ Aucune dépendance avec version codée en dur trouvée dans le module `%s`.",
-                    project.getArtifactId());
-            report.append(renderer.renderInfo(message));
-            log.info("[HardcodedVersionChecker] " + message);
-            return report.toString();
+            // Ne rien afficher si tout est OK
+            return "";
         }
+
+        StringBuilder report = new StringBuilder();
 
         // Rapport
         report.append(renderer.renderAnchor(ANCHOR_ID));
-        report.append(renderer.renderHeader3("🧱 Versions codées en dur détectées"));
+        report.append(renderer.renderHeader3("🧱 Versions codées en dur détectées dans `" + project.getArtifactId() + "`"));
         report.append(renderer.renderParagraph(
                 "Les dépendances suivantes utilisent une version définie en dur dans le `pom.xml`, au lieu d’une propriété `${...}`.\n" +
                         "Cela nuit à la centralisation et à la maintenabilité des versions."));

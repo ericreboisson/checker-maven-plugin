@@ -79,27 +79,26 @@ public class UnusedDependenciesChecker {
      * Génère le contenu du rapport pour les dépendances inutilisées.
      */
     private String renderReport(MavenProject project, List<Dependency> unusedDeps) {
+        if (unusedDeps.isEmpty()) {
+            return ""; // ✅ Rien à signaler, donc on ne retourne pas de rapport
+        }
+
         StringBuilder report = new StringBuilder();
         report.append(renderer.renderHeader3("🔍 Dépendances non utilisées dans `" + project.getArtifactId() + "`"));
+        report.append(renderer.renderWarning("Dépendances potentiellement inutilisées détectées :"));
 
-        if (unusedDeps.isEmpty()) {
-            report.append(renderer.renderInfo("Toutes les dépendances semblent utilisées."));
-        } else {
-            report.append(renderer.renderWarning("Dépendances potentiellement inutilisées détectées :"));
+        String[][] rows = unusedDeps.stream()
+                .map(dep -> new String[]{
+                        dep.getGroupId(),
+                        dep.getArtifactId(),
+                        dep.getVersion() != null ? dep.getVersion() : "inconnue"
+                })
+                .toArray(String[][]::new);
 
-            String[][] rows = unusedDeps.stream()
-                    .map(dep -> new String[]{
-                            "`" + dep.getGroupId() + "`",
-                            "`" + dep.getArtifactId() + "`",
-                            dep.getVersion() != null ? "`" + dep.getVersion() + "`" : "_inconnue_"
-                    })
-                    .toArray(String[][]::new);
-
-            report.append(renderer.renderTable(
-                    new String[]{"GroupId", "ArtifactId", "Version"},
-                    rows
-            ));
-        }
+        report.append(renderer.renderTable(
+                new String[]{"GroupId", "ArtifactId", "Version"},
+                rows
+        ));
 
         return report.toString();
     }

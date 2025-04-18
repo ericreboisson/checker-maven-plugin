@@ -16,7 +16,7 @@ import java.util.List;
  * <p>Les modules attendus sont générés dynamiquement à partir de l’identifiant
  * du projet parent suivi d’un suffixe standard tel que {@code -api}, {@code -impl}, etc.</p>
  */
-public class ModuleChecker {
+public class ExpectedModulesChecker {
 
     private final Log log;
     private final ReportRenderer renderer;
@@ -27,7 +27,7 @@ public class ModuleChecker {
      * @param log      Logger Maven
      * @param renderer Renderer de rapport (Markdown, HTML, etc.)
      */
-    public ModuleChecker(Log log, ReportRenderer renderer) {
+    public ExpectedModulesChecker(Log log, ReportRenderer renderer) {
         this.log = log;
         this.renderer = renderer;
     }

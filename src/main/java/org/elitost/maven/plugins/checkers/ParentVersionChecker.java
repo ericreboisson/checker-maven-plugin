@@ -61,8 +61,8 @@ public class ParentVersionChecker {
             Parent parent = model.getParent();
 
             if (parent == null) {
-                log.info("ℹ️ Aucun parent défini pour le projet " + project.getName());
-                return renderer.renderInfo("Aucun parent défini pour le projet " + project.getName());
+                log.error("Aucun parent défini pour le projet " + project.getName());
+                return renderer.renderError("Aucun parent défini pour le projet " + project.getName());
             }
 
             return renderIfOutdated(parent);
