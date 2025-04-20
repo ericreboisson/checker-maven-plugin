@@ -9,10 +9,7 @@ import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.repository.RemoteRepository;
 import org.elitost.maven.plugins.checkers.*;
-import org.elitost.maven.plugins.renderers.HtmlReportRenderer;
-import org.elitost.maven.plugins.renderers.MarkdownReportRenderer;
-import org.elitost.maven.plugins.renderers.ReportRenderer;
-import org.elitost.maven.plugins.renderers.TextReportRenderer;
+import org.elitost.maven.plugins.renderers.*;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
