@@ -43,6 +43,8 @@ public class RedefinedDependencyVersionChecker {
 
             if (!redefined.isEmpty()) {
                 report.append(renderer.renderHeader3("🔁 Dépendances redéfinies dans `" + project.getArtifactId() + "`"));
+                report.append(renderer.openIndentedSection());
+
                 report.append(renderer.renderParagraph("⚠️ Certaines dépendances redéfinissent une version différente de celle héritée :"));
                 report.append(renderer.renderTable(
                         new String[]{"Dépendance", "Version héritée", "Version redéfinie"},
@@ -54,6 +56,7 @@ public class RedefinedDependencyVersionChecker {
             log.error("[RedefinedDependencyVersionChecker] Exception levée", e);
             report.append(renderer.renderError("❌ Une erreur est survenue : " + e.getMessage()));
         }
+        report.append(renderer.closeIndentedSection());
 
         return report.toString();
     }

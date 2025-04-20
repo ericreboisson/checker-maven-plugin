@@ -45,9 +45,9 @@ public class ModuleCheckerMojo extends AbstractMojo {
 
     private ExpectedModulesChecker expectedModulesChecker;
     private ParentVersionChecker parentChecker;
-    private PropertyChecker propertyChecker;
+    private PropertyPresenceChecker propertyPresenceChecker;
     private HardcodedVersionChecker hardcodedChecker;
-    private DependencyUpdateChecker updateChecker;
+    private OutdatedDependenciesChecker updateChecker;
     private CommentedTagsChecker commentedTagsChecker;
     private RedundantPropertiesChecker redundantChecker;
     private UnusedDependenciesChecker unusedDependenciesChecker;
@@ -91,9 +91,9 @@ public class ModuleCheckerMojo extends AbstractMojo {
     private void initCheckers() {
         expectedModulesChecker = new ExpectedModulesChecker(log, resolveRenderer());
         parentChecker = new ParentVersionChecker(log, repoSystem, repoSession, remoteRepositories, resolveRenderer());
-        propertyChecker = new PropertyChecker(log, resolveRenderer());
+        propertyPresenceChecker = new PropertyPresenceChecker(log, resolveRenderer());
         hardcodedChecker = new HardcodedVersionChecker(log, resolveRenderer());
-        updateChecker = new DependencyUpdateChecker(log, repoSystem, repoSession, remoteRepositories, resolveRenderer());
+        updateChecker = new OutdatedDependenciesChecker(log, repoSystem, repoSession, remoteRepositories, resolveRenderer());
         commentedTagsChecker = new CommentedTagsChecker(log, resolveRenderer());
         redundantChecker = new RedundantPropertiesChecker(log, resolveRenderer());
         unusedDependenciesChecker = new UnusedDependenciesChecker(log, resolveRenderer());
@@ -124,16 +124,16 @@ public class ModuleCheckerMojo extends AbstractMojo {
         StringBuilder content = new StringBuilder();
         content.append(renderer.renderHeader2("Module : " + module.getArtifactId()));
 
-        if (isTopLevelProject(module) && (runAll || checkersToRun.contains("ExpectedModules"))) {
+        if (isTopLevelProject(module) && (runAll || checkersToRun.contains("expectedModules"))) {
             content.append(expectedModulesChecker.generateModuleCheckReport(module)).append("\n");
         }
 
-        if (runAll || checkersToRun.contains("parent")) {
+        if (runAll || checkersToRun.contains("parentVersion")) {
             content.append(parentChecker.generateParentVersionReport(module)).append("\n");
         }
 
-        if (isTopLevelProject(module) && (runAll || checkersToRun.contains("property"))) {
-            content.append(propertyChecker.generatePropertiesCheckReport(module, propertiesToCheck)).append("\n");
+        if (isTopLevelProject(module) && (runAll || checkersToRun.contains("propertyPresence"))) {
+            content.append(propertyPresenceChecker.generatePropertiesCheckReport(module, propertiesToCheck)).append("\n");
         }
 
         if (isTopLevelProject(module) && (runAll || checkersToRun.contains("urls"))) {
@@ -147,27 +147,27 @@ public class ModuleCheckerMojo extends AbstractMojo {
     }
 
     private void runCommonCheckers(MavenProject module, ReportRenderer renderer, StringBuilder content) {
-        if (runAll || checkersToRun.contains("hardcoded")) {
+        if (runAll || checkersToRun.contains("hardcodedVersion")) {
             content.append(hardcodedChecker.generateHardcodedVersionReport(module)).append("\n");
         }
 
-        if (runAll || checkersToRun.contains("outdated")) {
+        if (runAll || checkersToRun.contains("outdatedDependencies")) {
             content.append(updateChecker.generateOutdatedDependenciesReport(module.getOriginalModel().getDependencies()));
         }
 
-        if (runAll || checkersToRun.contains("commented")) {
+        if (runAll || checkersToRun.contains("commentedTags")) {
             content.append(commentedTagsChecker.generateCommentedTagsReport(module));
         }
 
-        if (runAll || checkersToRun.contains("redundant")) {
+        if (runAll || checkersToRun.contains("redundantProperties")) {
             content.append(redundantChecker.generateRedundantPropertiesReport(module)).append("\n");
         }
 
-        if (runAll || checkersToRun.contains("usage")) {
+        if (runAll || checkersToRun.contains("unusedDependencies")) {
             content.append(unusedDependenciesChecker.generateReport(module)).append("\n");
         }
 
-        if (runAll || checkersToRun.contains("redefinition")) {
+        if (runAll || checkersToRun.contains("dependenciesRedefinition")) {
             content.append(redefinitionChecker.generateRedefinitionReport(module)).append("\n");
         }
     }

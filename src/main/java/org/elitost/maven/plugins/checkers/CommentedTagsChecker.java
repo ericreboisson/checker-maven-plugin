@@ -63,6 +63,8 @@ public class CommentedTagsChecker {
             StringBuilder report = new StringBuilder();
             report.append(renderer.renderAnchor("commented-tags"));
             report.append(renderer.renderHeader3("🪧 Balises XML commentées détectées dans `pom.xml`"));
+            report.append(renderer.openIndentedSection());
+
             report.append(renderer.renderParagraph(
                     "Les balises ci-dessous sont actuellement désactivées dans le `pom.xml`. " +
                             "Cela peut entraîner des comportements inattendus si elles étaient censées être actives."
@@ -77,6 +79,8 @@ public class CommentedTagsChecker {
                     new String[]{"Bloc XML commenté"},
                     rows.toArray(new String[0][])
             ));
+
+            report.append(renderer.closeIndentedSection());
 
             return report.toString();
 
@@ -129,7 +133,7 @@ public class CommentedTagsChecker {
      * @return Contenu formaté avec balisage HTML
      */
     private String formatCommentAsHtml(String comment) {
-        return "<details><summary>Afficher le bloc</summary><pre>" +
+        return "<details open><summary>Afficher le bloc</summary><pre>" +
                 escapeHtml(comment) +
                 "</pre></details>";
     }

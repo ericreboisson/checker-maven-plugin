@@ -40,6 +40,7 @@ public class UrlChecker {
         StringBuilder report = new StringBuilder();
 
         report.append(renderer.renderHeader3("🔗 Vérification de la balise <url> pour le projet `" + artifactId + "`"));
+        report.append(renderer.openIndentedSection());
 
         try {
             String url = extractUrlFromPom(project.getFile());
@@ -65,6 +66,7 @@ public class UrlChecker {
             report.append(renderer.renderError(errorMessage));
             log.error("[UrlChecker] " + errorMessage, e);
         }
+        report.append(renderer.closeIndentedSection());
 
         return report.toString();
     }

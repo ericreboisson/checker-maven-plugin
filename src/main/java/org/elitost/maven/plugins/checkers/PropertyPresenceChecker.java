@@ -12,12 +12,12 @@ import java.util.Properties;
  * Vérifie la présence de propriétés spécifiques dans un projet Maven.
  * Génère un rapport indiquant si certaines propriétés sont présentes ou manquantes.
  */
-public class PropertyChecker {
+public class PropertyPresenceChecker {
 
     private final Log log;
     private final ReportRenderer renderer;
 
-    public PropertyChecker(Log log, ReportRenderer renderer) {
+    public PropertyPresenceChecker(Log log, ReportRenderer renderer) {
         this.log = log;
         this.renderer = renderer;
     }
@@ -32,6 +32,7 @@ public class PropertyChecker {
     public String generatePropertiesCheckReport(MavenProject project, List<String> propertiesToCheck) {
         StringBuilder report = new StringBuilder();
         report.append(renderer.renderHeader3("🔧 Vérification des Propriétés dans `" + project.getArtifactId() + "`"));
+        report.append(renderer.openIndentedSection());
 
         try {
             Properties props = project.getProperties();
@@ -47,7 +48,7 @@ public class PropertyChecker {
             log.error("[PropertyChecker] Exception levée", e);
             return renderErrorReport(e);
         }
-
+        report.append(renderer.closeIndentedSection());
         return report.toString();
     }
 

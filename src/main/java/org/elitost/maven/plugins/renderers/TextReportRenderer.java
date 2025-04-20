@@ -86,6 +86,16 @@ public class TextReportRenderer implements ReportRenderer {
         return "[[" + id + "]]\n";
     }
 
+    @Override
+    public String openIndentedSection() {
+        return "";
+    }
+
+    @Override
+    public String closeIndentedSection() {
+        return "";
+    }
+
     private String pad(String text, int width) {
         return String.format("%-" + width + "s", text);
     }

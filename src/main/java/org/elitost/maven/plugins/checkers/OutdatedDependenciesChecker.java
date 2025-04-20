@@ -25,7 +25,7 @@ import java.util.List;
  *
  * @author Eric
  */
-public class DependencyUpdateChecker {
+public class OutdatedDependenciesChecker {
 
     private static final String ANCHOR_ID = "dependency-updates";
 
@@ -44,11 +44,11 @@ public class DependencyUpdateChecker {
      * @param remoteRepositories la liste des dépôts Maven distants à interroger
      * @param renderer           le renderer pour générer les rapports
      */
-    public DependencyUpdateChecker(Log log,
-                                   RepositorySystem repoSystem,
-                                   RepositorySystemSession session,
-                                   List<RemoteRepository> remoteRepositories,
-                                   ReportRenderer renderer) {
+    public OutdatedDependenciesChecker(Log log,
+                                       RepositorySystem repoSystem,
+                                       RepositorySystemSession session,
+                                       List<RemoteRepository> remoteRepositories,
+                                       ReportRenderer renderer) {
         this.log = log;
         this.repoSystem = repoSystem;
         this.session = session;
@@ -70,6 +70,8 @@ public class DependencyUpdateChecker {
         if (!outdated.isEmpty()) {
             report.append(renderer.renderAnchor(ANCHOR_ID));
             report.append(renderer.renderHeader3("📦 Dépendances obsolètes détectées"));
+            report.append(renderer.openIndentedSection());
+
             report.append(renderer.renderParagraph(
                     "Certaines dépendances ont une version plus récente disponible dans les dépôts Maven. " +
                             "Il est recommandé de les mettre à jour pour bénéficier des dernières corrections de bugs, " +
@@ -82,6 +84,7 @@ public class DependencyUpdateChecker {
         } else {
             log.info("✅ Aucune dépendance obsolète détectée.");
         }
+        report.append(renderer.closeIndentedSection());
 
         return report.toString();
     }

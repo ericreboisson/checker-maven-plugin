@@ -85,6 +85,8 @@ public class UnusedDependenciesChecker {
 
         StringBuilder report = new StringBuilder();
         report.append(renderer.renderHeader3("🔍 Dépendances non utilisées dans `" + project.getArtifactId() + "`"));
+        report.append(renderer.openIndentedSection());
+
         report.append(renderer.renderWarning("Dépendances potentiellement inutilisées détectées :"));
 
         String[][] rows = unusedDeps.stream()
@@ -99,6 +101,8 @@ public class UnusedDependenciesChecker {
                 new String[]{"GroupId", "ArtifactId", "Version"},
                 rows
         ));
+
+        report.append(renderer.closeIndentedSection());
 
         return report.toString();
     }

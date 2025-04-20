@@ -68,4 +68,11 @@ public class HtmlReportRenderer implements ReportRenderer {
         return "<a name=\"" + escapeHtml(id) + "\"></a>\n";
     }
 
+    public String openIndentedSection() {
+        return "<div class='indented-section'>\n";
+    }
+
+    public String closeIndentedSection() {
+        return "</div>\n";
+    }
 }

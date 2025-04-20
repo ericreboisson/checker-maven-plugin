@@ -25,14 +25,15 @@ public class HelpMojo extends AbstractMojo {
 
         if (detail) {
             getLog().info("Liste des checkers disponibles :");
-            getLog().info(" - module       : Vérifie les infos générales du module");
-            getLog().info(" - parent       : Vérifie la version du parent");
-            getLog().info(" - property     : Vérifie les propriétés demandées");
-            getLog().info(" - hardcoded    : Détecte les versions codées en dur");
-            getLog().info(" - outdated     : Vérifie les dépendances obsolètes");
-            getLog().info(" - commented    : Détecte les balises XML commentées");
-            getLog().info(" - redundant    : Détecte les propriétés redondantes");
-            getLog().info(" - usage        : Détecte les dépendances non utilisées");
+            getLog().info(" - expectedModules          : Vérifie les infos générales du module");
+            getLog().info(" - parentVersion            : Vérifie la version du parent");
+            getLog().info(" - propertyPresence         : Vérifie les propriétés demandées");
+            getLog().info(" - hardcodedVersion         : Détecte les versions codées en dur");
+            getLog().info(" - outdatedDependencies     : Vérifie les dépendances obsolètes");
+            getLog().info(" - commentedTags            : Détecte les balises XML commentées");
+            getLog().info(" - redundantProperties      : Détecte les propriétés redondantes");
+            getLog().info(" - unusedDependencies       : Détecte les dépendances non utilisées");
+            getLog().info(" - dependenciesRedefinition : Détecte les versions de dépendances redéfinies");
         }
     }
 }

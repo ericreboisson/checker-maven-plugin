@@ -60,4 +60,14 @@ public class MarkdownReportRenderer implements ReportRenderer {
     public String renderAnchor(String id) {
         return "[//]: # (" + id + ")\n";
     }
+
+    @Override
+    public String openIndentedSection() {
+        return "";
+    }
+
+    @Override
+    public String closeIndentedSection() {
+        return "";
+    }
 }

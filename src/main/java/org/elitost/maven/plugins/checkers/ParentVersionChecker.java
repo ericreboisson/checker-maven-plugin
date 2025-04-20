@@ -83,6 +83,8 @@ public class ParentVersionChecker {
         if (latestVersion != null && !latestVersion.equals(currentVersion)) {
             StringBuilder report = new StringBuilder();
             report.append(renderer.renderHeader3("👪 Version obsolète du parent détectée"));
+            report.append(renderer.openIndentedSection());
+
             report.append(renderer.renderParagraph(
                     "Le fichier `pom.xml` utilise une version du parent qui n'est pas la plus récente disponible."));
 
@@ -91,6 +93,8 @@ public class ParentVersionChecker {
             report.append(renderer.renderTable(headers, rows));
             report.append(renderer.renderWarning(
                     "Pensez à mettre à jour la version du parent pour bénéficier des dernières améliorations."));
+
+            report.append(renderer.closeIndentedSection());
 
             return report.toString();
         }

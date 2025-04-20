@@ -43,7 +43,7 @@ public class ExpectedModulesChecker {
         StringBuilder report = new StringBuilder();
 
         report.append(renderer.renderHeader3("🧩 Vérification des modules du projet `" + artifactId + "`"));
-
+        report.append(renderer.openIndentedSection());
         try {
             List<String> expectedModules = getExpectedModules(artifactId);
             List<String> missingModules = findMissingModules(project, expectedModules);
@@ -74,7 +74,7 @@ public class ExpectedModulesChecker {
             report.append(renderer.renderError(errorMessage));
             log.error("[ModuleChecker] " + errorMessage, e);
         }
-
+        report.append(renderer.closeIndentedSection());
         return report.toString();
     }
 

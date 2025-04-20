@@ -98,10 +98,14 @@ public class RedundantPropertiesChecker {
     private String renderReport(String artifactId, List<String[]> unusedProperties) {
         StringBuilder report = new StringBuilder();
         report.append(renderer.renderHeader3("🧹 Propriétés Redondantes dans `" + artifactId + "`"));
+        report.append(renderer.openIndentedSection());
+
         report.append(renderer.renderParagraph(
                 "Les propriétés suivantes sont définies dans ce module mais ne sont référencées dans aucun `pom.xml` du projet :"
         ));
         report.append(renderer.renderTable(new String[]{"Nom de la propriété"}, unusedProperties.toArray(new String[0][])));
+        report.append(renderer.closeIndentedSection());
+
         return report.toString();
     }
 }
