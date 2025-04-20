@@ -7,84 +7,81 @@ import org.apache.maven.project.MavenProject;
 import java.io.File;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.file.Files;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
  * Vérifie la présence de la balise <url> dans le fichier pom.xml et si l'URL est en HTTPS et répond correctement.
+ * Ne génère de rapport que si des problèmes sont détectés.
  */
 public class UrlChecker {
 
     private final Log log;
     private final ReportRenderer renderer;
 
-    /**
-     * Constructeur principal.
-     *
-     * @param log      Logger Maven
-     * @param renderer Renderer de rapport (Markdown, HTML, etc.)
-     */
     public UrlChecker(Log log, ReportRenderer renderer) {
         this.log = log;
         this.renderer = renderer;
     }
 
     /**
-     * Génère un rapport sur la vérification de la balise <url> dans le pom.xml.
+     * Génère un rapport **uniquement s’il y a un problème** lié à la balise <url>.
      *
      * @param project le projet Maven
-     * @return un rapport de vérification au format du renderer fourni
+     * @return un rapport d'erreur ou une chaîne vide si tout est conforme
      */
     public String generateUrlCheckReport(MavenProject project) {
         String artifactId = project.getArtifactId();
         StringBuilder report = new StringBuilder();
-
-        report.append(renderer.renderHeader3("🔗 Vérification de la balise <url> pour le projet `" + artifactId + "`"));
-        report.append(renderer.openIndentedSection());
+        boolean hasIssue = false;
 
         try {
             String url = extractUrlFromPom(project.getFile());
 
-            if (url != null && !url.isEmpty()) {
-                report.append(renderer.renderParagraph("✅ La balise <url> est présente dans le `pom.xml` : " + url));
-
-                if (!url.startsWith("https://")) {
-                    report.append(renderer.renderError("L'URL doit commencer par `https://` : " + url));
-                    log.warn("[UrlChecker] L'URL doit commencer par https:// : " + url);
-                } else {
-                    if (isUrlResponding(url)) {
-                        report.append(renderer.renderParagraph("✅ L'URL répond correctement : " + url));
-                    } else {
-                        report.append(renderer.renderError("L'URL ne répond pas correctement : " + url));
-                    }
-                }
-            } else {
-                report.append(renderer.renderError("Pas de balise <url> présente dans le `pom.xml`"));
+            if (url == null || url.isBlank()) {
+                hasIssue = true;
+                report.append(renderer.renderHeader3("🔗 Problème avec la balise <url> dans `" + artifactId + "`"));
+                report.append(renderer.openIndentedSection());
+                report.append(renderer.renderError("Aucune balise `<url>` trouvée dans le `pom.xml`."));
+            } else if (!url.startsWith("https://")) {
+                hasIssue = true;
+                report.append(renderer.renderHeader3("🔗 Problème d'URL non sécurisée dans `" + artifactId + "`"));
+                report.append(renderer.openIndentedSection());
+                report.append(renderer.renderError("L'URL doit commencer par `https://` : " + url));
+                log.warn("[UrlChecker] L'URL n'est pas sécurisée : " + url);
+            } else if (!isUrlResponding(url)) {
+                hasIssue = true;
+                report.append(renderer.renderHeader3("🔗 L'URL ne répond pas dans `" + artifactId + "`"));
+                report.append(renderer.openIndentedSection());
+                report.append(renderer.renderError("L'URL ne répond pas correctement : " + url));
             }
+
         } catch (Exception e) {
-            String errorMessage = "Une erreur est survenue lors de la vérification de la balise <url> : `" + e.getMessage() + "`";
+            hasIssue = true;
+            report.append(renderer.renderHeader3("🔗 Erreur d’analyse de l’URL dans `" + artifactId + "`"));
+            report.append(renderer.openIndentedSection());
+            String errorMessage = "Erreur lors de la vérification de la balise `<url>` : `" + e.getMessage() + "`";
             report.append(renderer.renderError(errorMessage));
             log.error("[UrlChecker] " + errorMessage, e);
         }
-        report.append(renderer.closeIndentedSection());
 
-        return report.toString();
+        if (hasIssue) {
+            report.append(renderer.closeIndentedSection());
+            return report.toString();
+        }
+
+        return "";
     }
 
-    /**
-     * Extrait l'URL de la balise <url> dans le fichier pom.xml.
-     *
-     * @param pomFile Le fichier pom.xml
-     * @return l'URL extraite ou null si non trouvée
-     */
     private String extractUrlFromPom(File pomFile) {
         try {
             Pattern pattern = Pattern.compile("<url>(.*?)</url>");
-            String content = new String(java.nio.file.Files.readAllBytes(pomFile.toPath()));
+            String content = new String(Files.readAllBytes(pomFile.toPath()));
             Matcher matcher = pattern.matcher(content);
 
             if (matcher.find()) {
-                return matcher.group(1); // Retourne l'URL extraite
+                return matcher.group(1).trim();
             }
         } catch (Exception e) {
             log.error("Erreur lors de l'extraction de l'URL du fichier pom.xml", e);
@@ -92,12 +89,6 @@ public class UrlChecker {
         return null;
     }
 
-    /**
-     * Vérifie si l'URL répond correctement (HTTP 200).
-     *
-     * @param urlString L'URL à vérifier
-     * @return true si l'URL répond correctement, sinon false
-     */
     private boolean isUrlResponding(String urlString) {
         try {
             URL url = new URL(urlString);
@@ -107,10 +98,9 @@ public class UrlChecker {
             connection.setReadTimeout(5000);
             connection.connect();
 
-            int responseCode = connection.getResponseCode();
-            return responseCode == HttpURLConnection.HTTP_OK;
+            return connection.getResponseCode() == HttpURLConnection.HTTP_OK;
         } catch (Exception e) {
-            log.error("Erreur lors de la connexion à l'URL: " + urlString, e);
+            log.error("Erreur lors de la connexion à l'URL : " + urlString, e);
             return false;
         }
     }

@@ -17,12 +17,6 @@ public interface ReportRenderer {
 
     String renderError(String text);
 
-    /**
-     * Génère une ancre HTML/Markdown pour permettre la navigation dans le document.
-     * Ex : <a name="commented-tags"></a> ou [//]: # (commented-tags)
-     */
-    String renderAnchor(String id);
-
     String openIndentedSection();
 
     String closeIndentedSection();

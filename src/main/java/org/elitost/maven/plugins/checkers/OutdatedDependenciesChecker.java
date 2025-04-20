@@ -68,7 +68,6 @@ public class OutdatedDependenciesChecker {
         List<String[]> outdated = checkForUpdates(dependencies);
 
         if (!outdated.isEmpty()) {
-            report.append(renderer.renderAnchor(ANCHOR_ID));
             report.append(renderer.renderHeader3("📦 Dépendances obsolètes détectées"));
             report.append(renderer.openIndentedSection());
 
@@ -80,9 +79,9 @@ public class OutdatedDependenciesChecker {
             String[] headers = { "🏷️ Group ID", "📘 Artifact ID", "🕒 Version actuelle", "🚀 Dernière version stable" };
             report.append(renderer.renderTable(headers, outdated.toArray(new String[0][])));
 
-            report.append(renderer.renderInfo("🔄 Pensez à tester les mises à jour avant de les intégrer définitivement."));
+            report.append(renderer.renderInfo("Pensez à tester les mises à jour avant de les intégrer définitivement."));
         } else {
-            log.info("✅ Aucune dépendance obsolète détectée.");
+            log.info("Aucune dépendance obsolète détectée.");
         }
         report.append(renderer.closeIndentedSection());
 
@@ -122,7 +121,7 @@ public class OutdatedDependenciesChecker {
                 }
 
             } catch (Exception e) {
-                log.warn(String.format("❌ Impossible de vérifier les mises à jour pour %s:%s", groupId, artifactId), e);
+                log.warn(String.format("Impossible de vérifier les mises à jour pour %s:%s", groupId, artifactId), e);
             }
         }
 

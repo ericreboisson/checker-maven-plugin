@@ -53,6 +53,7 @@ public class ModuleCheckerMojo extends AbstractMojo {
     private UnusedDependenciesChecker unusedDependenciesChecker;
     private UrlChecker urlChecker;
     private RedefinedDependencyVersionChecker redefinitionChecker;
+    private InterfaceConformityChecker interfaceConformityChecker;
 
 
     private Log log;
@@ -99,6 +100,7 @@ public class ModuleCheckerMojo extends AbstractMojo {
         unusedDependenciesChecker = new UnusedDependenciesChecker(log, resolveRenderer());
         urlChecker = new UrlChecker(log, resolveRenderer());
         redefinitionChecker = new RedefinedDependencyVersionChecker(log, resolveRenderer());
+        interfaceConformityChecker = new InterfaceConformityChecker(log, resolveRenderer());
     }
 
     private void enrichPropertiesFromSystem() {
@@ -136,11 +138,11 @@ public class ModuleCheckerMojo extends AbstractMojo {
             content.append(propertyPresenceChecker.generatePropertiesCheckReport(module, propertiesToCheck)).append("\n");
         }
 
-        if (isTopLevelProject(module) && (runAll || checkersToRun.contains("urls"))) {
-
-            content.append(urlChecker.generateUrlCheckReport(module)).append("\n");
+        if (runAll || checkersToRun.contains("interfaceConformity")) {
+            if (module.getArtifactId().endsWith("-api")) {
+                content.append(interfaceConformityChecker.generateReport(module, project)).append("\n");
+            }
         }
-
         runCommonCheckers(module, renderer, content);
 
         return content.toString();
@@ -170,6 +172,10 @@ public class ModuleCheckerMojo extends AbstractMojo {
         if (runAll || checkersToRun.contains("dependenciesRedefinition")) {
             content.append(redefinitionChecker.generateRedefinitionReport(module)).append("\n");
         }
+
+        if (runAll || checkersToRun.contains("urls")) {
+            content.append(urlChecker.generateUrlCheckReport(module)).append("\n");
+        }
     }
 
     private void writeReport(String content) throws MojoExecutionException {
@@ -189,8 +195,7 @@ public class ModuleCheckerMojo extends AbstractMojo {
             } else if (ext.equals("html")) {
                 // Lecture du fichier style.css depuis les ressources
                 String cssContent = readResourceAsString("assets/css/style.css");
-
-                writer.write("<html>\n<head>\n<title>Rapport de Vérification</title>\n");
+                writer.write("<html>\n<head><meta charset=\"UTF-8\">\n<title>Rapport de Vérification</title>\n");
                 writer.write("<style>\n" + cssContent + "\n</style>\n");
                 writer.write("</head>\n<body>\n");
                 writer.write("<h1>Rapport de Vérification</h1>\n");

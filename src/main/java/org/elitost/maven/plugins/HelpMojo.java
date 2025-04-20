@@ -34,6 +34,8 @@ public class HelpMojo extends AbstractMojo {
             getLog().info(" - redundantProperties      : Détecte les propriétés redondantes");
             getLog().info(" - unusedDependencies       : Détecte les dépendances non utilisées");
             getLog().info(" - dependenciesRedefinition : Détecte les versions de dépendances redéfinies");
+            getLog().info(" - interfaceConformity      : check de la conformité des interfaces");
+            getLog().info(" - urls                     : check de la présence d'URLs");
         }
     }
 }

@@ -4,7 +4,7 @@ body {
     color: #334155;
     background-color: #f1f5f9;
     margin: 16px;
-    line-height: 1.4;
+    line-height: 1.5;
 }
 
 /* H1 */
@@ -28,7 +28,7 @@ h2 {
     color: #e2e8f0;
     font-size: 1.25em;
     padding: 0.6em 1.2em;
-    border: 2px solid #334155;
+    border: none;
     border-radius: 8px;
     text-align: center;
     box-shadow:
@@ -36,7 +36,7 @@ h2 {
             inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
-/* H3 - plus marqué, plus sombre */
+/* H3 */
 h3 {
     background-color: #475569;
     color: #f8fafc;
@@ -48,85 +48,86 @@ h3 {
     border-bottom: 1px solid #64748b;
     border-radius: 5px;
     font-weight: 700;
-    font-family: 'Lato', sans-serif;
-    line-height: 1.4;
     text-transform: uppercase;
     letter-spacing: 0.6px;
+    line-height: 1.4;
     box-shadow:
             0 2px 6px rgba(0, 0, 0, 0.15),
             inset 0 1px 2px rgba(255, 255, 255, 0.05),
             inset 0 -1px 2px rgba(0, 0, 0, 0.05);
 }
 
+/* Indented section */
 .indented-section {
-    margin-left: 2.5em; /* correspond au décalage du h3 */
-    padding-left: 1em; /* léger retrait intérieur pour lisibilité */
-    border-left: 3px solid #94a3b8; /* rappel du bleu clair */
-    background-color: #f1f5f9; /* fond très clair pour détacher */
+    margin-left: 2.5em;
+    padding-left: 1em;
+    border-left: 4px solid #f97316;
+    background-color: #fff7ed;
     border-radius: 4px;
-    padding-top: 0.4em;
-    padding-bottom: 0.4em;
+    padding-top: 0.5em;
+    padding-bottom: 0.5em;
     box-shadow:
             inset 0 1px 1px rgba(255, 255, 255, 0.3),
             inset 0 -1px 1px rgba(0, 0, 0, 0.02);
 }
+
 /* Table */
 table {
     width: 100%;
+    overflow-x: auto;
     border-collapse: collapse;
     background-color: #ffffff;
-    font-size: 0.85em;
-    border: 1px solid #e2e8f0;
+    font-size: 0.88em;
     border-radius: 4px;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.06);
 }
 
 /* Table Header */
 table thead {
-    background: linear-gradient(135deg, #64748b, #94a3b8);
-    color: #ffffff;
-    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.3);
+    background-color: #1e293b;
+    color: #f8fafc;
+    text-align: left;
 }
 
-/* Désactive les effets de hover sur le header */
-table thead tr:hover,
-table thead tr:hover th {
-    background-color: inherit;
-    color: inherit;
-    box-shadow: none;
-    cursor: default;
-}
-
-/* Table Cellules */
-table th, table td {
-    padding: 4px 8px;
-    border-bottom: 1px solid #e2e8f0;
-}
-
-table th {
-    font-weight: 600;
+table thead th {
+    padding: 6px 10px;
+    font-weight: 700;
     letter-spacing: 0.3px;
     text-transform: uppercase;
+    border-bottom: none; /* <-- Bordure orange supprimée ici */
 }
 
-/* Table Corps */
-table tr:nth-child(even) {
-    background-color: #f1f5f9;
+/* Table Rows */
+table tbody tr {
+    background-color: #fdba74;
+    transition: background-color 0.3s ease, color 0.3s ease;
+    color: #1e1e1e;
 }
 
-table tr:hover {
-    background-color: #e2e8f0;
-    box-shadow: inset 0 0 4px rgba(0, 0, 0, 0.05);
+table tbody tr:nth-child(even) {
+    background-color: #fb923c;
+}
+
+table tbody tr:hover {
+    background-color: #f97316;
+    color: #ffffff;
+    box-shadow: inset 0 0 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Table Cells */
+table td {
+    padding: 6px 10px;
+    border-bottom: 1px solid #fcd34d;
 }
 
 /* Bloc <details> */
 details {
-    margin: 0.8em 0;
+    margin: 1em 0;
     padding: 0.4em;
     background-color: #f8fafc;
     border: 1px solid #cbd5e1;
     border-radius: 4px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 details summary {
@@ -136,7 +137,7 @@ details summary {
     padding: 0.3em 0;
 }
 
-/* Bloc <pre> à l'intérieur d'un <details> */
+/* Bloc <pre> */
 details pre {
     background-color: #1e293b;
     color: #f8fafc;
@@ -148,6 +149,6 @@ details pre {
     line-height: 1.3;
     font-family: 'Courier New', Courier, monospace;
     box-shadow:
-            inset 0 1px 2px rgba(255,255,255,0.05),
-            0 1px 3px rgba(0,0,0,0.08);
+            inset 0 1px 2px rgba(255, 255, 255, 0.05),
+            0 1px 3px rgba(0, 0, 0, 0.08);
 }

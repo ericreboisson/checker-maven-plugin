@@ -1,0 +1,191 @@
+package org.elitost.maven.plugins.checkers;
+
+import org.apache.maven.plugin.logging.Log;
+import org.apache.maven.project.MavenProject;
+import org.elitost.maven.plugins.renderers.ReportRenderer;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.*;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+
+/**
+ * Vérifie que toutes les interfaces Java déclarées dans le module <code>-api</code>
+ * sont bien référencées dans des tests via des appels à
+ * <code>ClassInspector.logClassName(Foo.class)</code>.
+ *
+ * <p>
+ * Ce checker vise à garantir que chaque interface exposée par l'API dispose d'une
+ * validation explicite dans les tests unitaires ou d'intégration.
+ * Cela permet notamment :
+ * </p>
+ * <ul>
+ *   <li>De s'assurer de la visibilité et du suivi des interfaces exposées</li>
+ *   <li>De faciliter les outils d'analyse statique ou de génération de documentation</li>
+ *   <li>De repérer les interfaces oubliées ou orphelines</li>
+ * </ul>
+ *
+ * <p>
+ * Le rapport généré inclut un tableau listant les interfaces non couvertes par les appels à
+ * <code>ClassInspector.logClassName(...)</code>.
+ * </p>
+ *
+ * @author Eric
+ */
+public class InterfaceConformityChecker {
+
+    private final Log log;
+    private final ReportRenderer renderer;
+
+    /**
+     * Constructeur principal.
+     *
+     * @param log      Logger Maven
+     * @param renderer Composant chargé de générer le rapport dans le format cible (Markdown, HTML, etc.)
+     */
+    public InterfaceConformityChecker(Log log, ReportRenderer renderer) {
+        this.log = log;
+        this.renderer = renderer;
+    }
+
+    /**
+     * Génère un rapport listant les interfaces Java non référencées dans des appels
+     * à <code>ClassInspector.logClassName(...)</code> dans les tests.
+     *
+     * @param apiProject  Projet Maven contenant les interfaces (généralement le module <code>-api</code>)
+     * @param rootProject Projet racine, utilisé pour scanner tous les tests des sous-modules
+     * @return Chaîne représentant le rapport complet formaté via le {@link ReportRenderer}
+     */
+    public String generateReport(MavenProject apiProject, MavenProject rootProject) {
+        String artifactId = apiProject.getArtifactId();
+        StringBuilder report = new StringBuilder();
+
+        report.append(renderer.renderHeader3("🧪 Conformité des interfaces de `" + artifactId + "`"));
+        report.append(renderer.openIndentedSection());
+
+        List<String> interfaceNames = collectInterfaceNames(new File(apiProject.getBasedir(), "src/main/java"));
+        if (interfaceNames.isEmpty()) {
+            report.append(renderer.renderParagraph("✅ Aucune interface trouvée dans `" + artifactId + "`."));
+            report.append(renderer.closeIndentedSection());
+            return report.toString();
+        }
+
+        Set<String> loggedInterfaces = findLoggedInterfaces(rootProject);
+
+        List<String[]> uncovered = interfaceNames.stream()
+                .filter(iface -> !loggedInterfaces.contains(iface))
+                .map(name -> new String[]{name})
+                .collect(Collectors.toList());
+
+        if (uncovered.isEmpty()) {
+            report.append(renderer.renderParagraph("✅ Toutes les interfaces sont référencées via `ClassInspector.logClassName(...)`."));
+        } else {
+            report.append(renderer.renderWarning("Interfaces non référencées par `ClassInspector.logClassName(...)` :"));
+            report.append(renderer.renderTable(new String[]{"Interface non testée"}, uncovered.toArray(new String[0][])));
+        }
+
+        report.append(renderer.closeIndentedSection());
+        return report.toString();
+    }
+
+    /**
+     * Scanne les fichiers sources du module pour extraire les noms des interfaces Java.
+     *
+     * @param sourceDir Répertoire racine des sources (src/main/java)
+     * @return Liste des noms simples des interfaces trouvées (sans package)
+     */
+    private List<String> collectInterfaceNames(File sourceDir) {
+        if (!sourceDir.exists()) return Collections.emptyList();
+
+        try {
+            return Files.walk(sourceDir.toPath())
+                    .filter(path -> path.toString().endsWith(".java"))
+                    .map(this::extractInterfaceName)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+        } catch (IOException e) {
+            log.error("Erreur lors du scan des interfaces dans : " + sourceDir, e);
+            return Collections.emptyList();
+        }
+    }
+
+    /**
+     * Extrait le nom simple d’une interface à partir d’un fichier .java.
+     *
+     * @param file Fichier source Java
+     * @return Nom de l’interface (ex : "FooApi"), ou null si aucune interface trouvée
+     */
+    private String extractInterfaceName(Path file) {
+        try {
+            List<String> lines = Files.readAllLines(file);
+            for (String line : lines) {
+                line = line.trim();
+                if (line.contains("interface ")) {
+                    String[] tokens = line.split("\\s+");
+                    for (int i = 0; i < tokens.length - 1; i++) {
+                        if ("interface".equals(tokens[i])) {
+                            return tokens[i + 1].replaceAll("[<{].*", ""); // supprime les génériques
+                        }
+                    }
+                }
+            }
+        } catch (IOException e) {
+            log.warn("⚠️ Lecture impossible : " + file);
+        }
+        return null;
+    }
+
+    /**
+     * Recherche dans tous les modules Maven les appels à {@code ClassInspector.logClassName(...)} dans les tests.
+     *
+     * @param rootProject Projet parent contenant tous les modules
+     * @return Ensemble des noms d’interfaces référencés dans les tests
+     */
+    private Set<String> findLoggedInterfaces(MavenProject rootProject) {
+        Set<String> found = new HashSet<>();
+
+        List<MavenProject> modules = rootProject.getCollectedProjects();
+        if (modules == null) return found;
+
+        for (MavenProject module : modules) {
+            File testDir = new File(module.getBasedir(), "src/test/java");
+            if (!testDir.exists()) continue;
+
+            try {
+                Files.walk(testDir.toPath())
+                        .filter(p -> p.toString().endsWith(".java"))
+                        .forEach(file -> {
+                            try {
+                                String content = Files.readString(file);
+                                extractLogClassNameCalls(content).forEach(found::add);
+                            } catch (IOException e) {
+                                log.warn("⚠️ Lecture échouée pour le fichier : " + file);
+                            }
+                        });
+            } catch (IOException e) {
+                log.warn("Erreur lors du parcours de " + module.getArtifactId(), e);
+            }
+        }
+
+        return found;
+    }
+
+    /**
+     * Recherche les appels à {@code ClassInspector.logClassName(Foo.class)} dans le contenu d’un fichier Java.
+     *
+     * @param content contenu brut du fichier source
+     * @return Liste des noms d’interfaces passés à la méthode logClassName(...)
+     */
+    private List<String> extractLogClassNameCalls(String content) {
+        List<String> results = new ArrayList<>();
+        Pattern pattern = Pattern.compile("ClassInspector\\.logClassName\\(([^)]+)\\.class\\)");
+        Matcher matcher = pattern.matcher(content);
+        while (matcher.find()) {
+            results.add(matcher.group(1).trim());
+        }
+        return results;
+    }
+}

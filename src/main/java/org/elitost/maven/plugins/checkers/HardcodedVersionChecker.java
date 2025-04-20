@@ -54,7 +54,6 @@ public class HardcodedVersionChecker {
         StringBuilder report = new StringBuilder();
 
         // Rapport
-        report.append(renderer.renderAnchor(ANCHOR_ID));
         report.append(renderer.renderHeader3("🧱 Versions codées en dur détectées dans `" + project.getArtifactId() + "`"));
         report.append(renderer.openIndentedSection());
 

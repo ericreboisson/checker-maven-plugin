@@ -47,7 +47,7 @@ public class CommentedTagsChecker {
     public String generateCommentedTagsReport(MavenProject project) {
         File pomFile = new File(project.getBasedir(), "pom.xml");
         if (!pomFile.exists()) {
-            String errorMsg = "❌ Impossible de trouver le fichier pom.xml de " + project.getArtifactId();
+            String errorMsg = "Impossible de trouver le fichier pom.xml de " + project.getArtifactId();
             log.warn("[CommentedTagsChecker] " + errorMsg);
             return renderer.renderError(errorMsg);
         }
@@ -61,7 +61,6 @@ public class CommentedTagsChecker {
             }
 
             StringBuilder report = new StringBuilder();
-            report.append(renderer.renderAnchor("commented-tags"));
             report.append(renderer.renderHeader3("🪧 Balises XML commentées détectées dans `pom.xml`"));
             report.append(renderer.openIndentedSection());
 
@@ -85,7 +84,7 @@ public class CommentedTagsChecker {
             return report.toString();
 
         } catch (IOException e) {
-            String errorMsg = "❌ Erreur lors de la lecture du pom.xml : " + e.getMessage();
+            String errorMsg = "Erreur lors de la lecture du pom.xml : " + e.getMessage();
             log.error("[CommentedTagsChecker] " + errorMsg);
             return renderer.renderError(errorMsg);
         }
@@ -142,12 +141,19 @@ public class CommentedTagsChecker {
      * Échappe les caractères spéciaux HTML.
      */
     private String escapeHtml(String input) {
-        return input.replace("&", "&amp;")
-                .replace("|", "\\|")
-                .replace("<", "&lt;")
-                .replace(">", "&gt;")
-                .replace("\"", "&quot;")
-                .replace("\r", "")
-                .replace("\n", "<br/>");
+        StringBuilder sb = new StringBuilder(input.length());
+        for (char c : input.toCharArray()) {
+            switch (c) {
+                case '&': sb.append("&amp;"); break;
+                case '|': sb.append("\\|"); break;
+                case '<': sb.append("&lt;"); break;
+                case '>': sb.append("&gt;"); break;
+                case '"': sb.append("&quot;"); break;
+                case '\n': sb.append("<br/>"); break;
+                case '\r': break;
+                default: sb.append(c);
+            }
+        }
+        return sb.toString();
     }
 }

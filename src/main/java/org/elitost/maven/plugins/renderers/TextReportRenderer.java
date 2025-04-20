@@ -1,25 +1,25 @@
 package org.elitost.maven.plugins.renderers;
 
 /**
- * Renderer simple pour les rapports en texte brut (ex. console ou .txt).
+ * Renderer pour la génération de rapports en texte brut (console, fichiers .txt).
+ * Fournit une mise en forme tabulaire simple avec alignement et indicateurs visuels.
  */
 public class TextReportRenderer implements ReportRenderer {
 
     @Override
     public String renderHeader1(String title) {
-        return "\n=== " + title + " ===\n\n";
+        return "\n==================== " + title + " ====================\n\n";
     }
 
     @Override
     public String renderHeader2(String title) {
-        return "\n=== " + title + " ===\n\n";
+        return "\n-------------------- " + title + " --------------------\n\n";
     }
 
     @Override
     public String renderHeader3(String title) {
-        return "\n=== " + title + " ===\n\n";
+        return "\n>>> " + title.toUpperCase() + " <<<\n\n";
     }
-
 
     @Override
     public String renderParagraph(String text) {
@@ -31,34 +31,26 @@ public class TextReportRenderer implements ReportRenderer {
         StringBuilder sb = new StringBuilder();
 
         // Calcule la largeur maximale de chaque colonne
-        int[] colWidths = new int[headers.length];
-        for (int i = 0; i < headers.length; i++) {
-            colWidths[i] = headers[i].length();
-        }
-        for (String[] row : rows) {
-            for (int i = 0; i < row.length; i++) {
-                colWidths[i] = Math.max(colWidths[i], row[i].length());
-            }
-        }
+        int[] colWidths = computeColumnWidths(headers, rows);
 
         // Ligne d'en-tête
         for (int i = 0; i < headers.length; i++) {
-            sb.append(pad(headers[i], colWidths[i])).append(" | ");
+            sb.append("| ").append(pad(headers[i], colWidths[i])).append(" ");
         }
-        sb.append("\n");
+        sb.append("|\n");
 
         // Séparateur
-        for (int colWidth : colWidths) {
-            sb.append("-".repeat(colWidth)).append(" | ");
+        for (int width : colWidths) {
+            sb.append("| ").append("-".repeat(width)).append(" ");
         }
-        sb.append("\n");
+        sb.append("|\n");
 
         // Lignes de données
         for (String[] row : rows) {
             for (int i = 0; i < row.length; i++) {
-                sb.append(pad(row[i], colWidths[i])).append(" | ");
+                sb.append("| ").append(pad(row[i], colWidths[i])).append(" ");
             }
-            sb.append("\n");
+            sb.append("|\n");
         }
 
         sb.append("\n");
@@ -67,12 +59,12 @@ public class TextReportRenderer implements ReportRenderer {
 
     @Override
     public String renderWarning(String text) {
-        return "⚠️ AVERTISSEMENT : " + text + "\n";
+        return "⚠️  AVERTISSEMENT : " + text + "\n";
     }
 
     @Override
     public String renderInfo(String text) {
-        return "ℹ️ INFO : " + text + "\n";
+        return "ℹ️  INFO : " + text + "\n";
     }
 
     @Override
@@ -81,14 +73,8 @@ public class TextReportRenderer implements ReportRenderer {
     }
 
     @Override
-    public String renderAnchor(String id) {
-        // En mode texte, une ancre peut juste être un marqueur visuel
-        return "[[" + id + "]]\n";
-    }
-
-    @Override
     public String openIndentedSection() {
-        return "";
+        return ""; // Optionnellement tu pourrais préfixer chaque ligne avec 2 espaces
     }
 
     @Override
@@ -96,7 +82,24 @@ public class TextReportRenderer implements ReportRenderer {
         return "";
     }
 
+    // Calcule la largeur maximale de chaque colonne (headers + contenu)
+    private int[] computeColumnWidths(String[] headers, String[][] rows) {
+        int[] widths = new int[headers.length];
+
+        for (int i = 0; i < headers.length; i++) {
+            widths[i] = headers[i].length();
+        }
+
+        for (String[] row : rows) {
+            for (int i = 0; i < row.length; i++) {
+                widths[i] = Math.max(widths[i], row[i] != null ? row[i].length() : 0);
+            }
+        }
+
+        return widths;
+    }
+
     private String pad(String text, int width) {
-        return String.format("%-" + width + "s", text);
+        return String.format("%-" + width + "s", text != null ? text : "");
     }
 }

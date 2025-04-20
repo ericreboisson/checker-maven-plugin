@@ -63,11 +63,6 @@ public class HtmlReportRenderer implements ReportRenderer {
         return "<div class='error'>❌ " + escapeHtml(text) + "</div>\n";
     }
 
-    @Override
-    public String renderAnchor(String id) {
-        return "<a name=\"" + escapeHtml(id) + "\"></a>\n";
-    }
-
     public String openIndentedSection() {
         return "<div class='indented-section'>\n";
     }

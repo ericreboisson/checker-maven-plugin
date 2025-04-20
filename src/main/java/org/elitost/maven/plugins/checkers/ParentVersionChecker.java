@@ -18,6 +18,7 @@ import java.io.File;
 import java.io.FileReader;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Vérifie si la version du parent dans un fichier pom.xml est à jour.
@@ -52,7 +53,7 @@ public class ParentVersionChecker {
     public String generateParentVersionReport(MavenProject project) {
         File pomFile = project.getFile();
         if (pomFile == null || !pomFile.exists()) {
-            log.warn("❌ Fichier pom.xml introuvable pour le projet " + project.getName());
+            log.warn("Fichier pom.xml introuvable pour le projet " + project.getName());
             return "";
         }
 
@@ -62,13 +63,21 @@ public class ParentVersionChecker {
 
             if (parent == null) {
                 log.error("Aucun parent défini pour le projet " + project.getName());
-                return renderer.renderError("Aucun parent défini pour le projet " + project.getName());
+
+                StringBuilder report = new StringBuilder();
+                report.append(renderer.renderHeader3("👪 Absence de parent Maven détectée"));
+                report.append(renderer.openIndentedSection());
+                report.append(renderer.renderError("Aucun parent défini pour le projet `" + project.getName() + "`."));
+                report.append(renderer.renderInfo("Si ce module est censé hériter d’un `pom` parent, vérifiez la configuration de l’élément `<parent>`."));
+                report.append(renderer.closeIndentedSection());
+
+                return report.toString();
             }
 
             return renderIfOutdated(parent);
 
         } catch (Exception e) {
-            log.error("❌ Erreur lors de l'analyse du parent dans le pom.xml du projet " + project.getName(), e);
+            log.error("Erreur lors de l'analyse du parent dans le pom.xml du projet " + project.getName(), e);
             return renderer.renderError("Erreur lors de l'analyse du parent : " + e.getMessage());
         }
     }
@@ -80,7 +89,7 @@ public class ParentVersionChecker {
         String currentVersion = parent.getVersion();
         String latestVersion = getLatestParentVersion(parent);
 
-        if (latestVersion != null && !latestVersion.equals(currentVersion)) {
+        if (latestVersion != null && !Objects.equals(latestVersion, currentVersion)) {
             StringBuilder report = new StringBuilder();
             report.append(renderer.renderHeader3("👪 Version obsolète du parent détectée"));
             report.append(renderer.openIndentedSection());
@@ -127,7 +136,7 @@ public class ParentVersionChecker {
                     .orElse(null);
 
         } catch (Exception e) {
-            log.warn("❌ Impossible de récupérer la dernière version pour le parent : "
+            log.warn("Impossible de récupérer la dernière version pour le parent : "
                     + parent.getGroupId() + ":" + parent.getArtifactId(), e);
             return null;
         }
