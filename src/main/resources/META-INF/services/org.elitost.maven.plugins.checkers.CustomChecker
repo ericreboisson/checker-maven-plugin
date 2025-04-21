@@ -1,0 +1,11 @@
+org.elitost.maven.plugins.checkers.ExpectedModulesChecker
+org.elitost.maven.plugins.checkers.ParentVersionChecker
+org.elitost.maven.plugins.checkers.PropertyPresenceChecker
+org.elitost.maven.plugins.checkers.HardcodedVersionChecker
+org.elitost.maven.plugins.checkers.OutdatedDependenciesChecker
+org.elitost.maven.plugins.checkers.CommentedTagsChecker
+org.elitost.maven.plugins.checkers.RedundantPropertiesChecker
+org.elitost.maven.plugins.checkers.UnusedDependenciesChecker
+org.elitost.maven.plugins.checkers.UrlChecker
+org.elitost.maven.plugins.checkers.RedefinedDependencyVersionChecker
+org.elitost.maven.plugins.checkers.InterfaceConformityChecker

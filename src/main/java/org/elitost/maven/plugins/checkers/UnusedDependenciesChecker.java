@@ -2,9 +2,9 @@ package org.elitost.maven.plugins.checkers;
 
 import org.elitost.maven.plugins.CheckerContext;
 import org.elitost.maven.plugins.renderers.ReportRenderer;
-import org.apache.maven.model.Dependency;
 import org.apache.maven.plugin.logging.Log;
 import org.apache.maven.project.MavenProject;
+import org.apache.maven.model.Dependency;
 
 import java.io.File;
 import java.io.IOException;
@@ -15,12 +15,18 @@ import java.util.stream.Collectors;
 /**
  * Analyseur de dépendances potentiellement non utilisées dans le code source Java.
  */
-public class UnusedDependenciesChecker implements CustomChecker {
+public class UnusedDependenciesChecker implements CustomChecker, BasicInitializableChecker {
 
-    private final Log log;
-    private final ReportRenderer renderer;
+    private Log log;
+    private ReportRenderer renderer;
 
-    public UnusedDependenciesChecker(Log log, ReportRenderer renderer) {
+    /** Constructeur requis pour le chargement SPI */
+    public UnusedDependenciesChecker() {
+        // Constructeur sans argument requis pour SPI
+    }
+
+    @Override
+    public void init(Log log, ReportRenderer renderer) {
         this.log = log;
         this.renderer = renderer;
         log.debug("[UnusedDependenciesChecker] Initialisé");
@@ -28,7 +34,7 @@ public class UnusedDependenciesChecker implements CustomChecker {
 
     @Override
     public String getId() {
-        return "";
+        return "unusedDependencies";
     }
 
     /**
@@ -157,5 +163,4 @@ public class UnusedDependenciesChecker implements CustomChecker {
         hints.put("org.slf4j:slf4j-api", List.of("org.slf4j", "logger", "loggerfactory"));
         return hints;
     }
-
 }

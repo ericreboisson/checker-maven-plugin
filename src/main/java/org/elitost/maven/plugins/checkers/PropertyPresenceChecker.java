@@ -13,32 +13,41 @@ import java.util.Properties;
  * Vérifie la présence de propriétés spécifiques dans un projet Maven.
  * Génère un rapport listant uniquement les propriétés manquantes.
  */
-public class PropertyPresenceChecker implements CustomChecker{
+public class PropertyPresenceChecker implements CustomChecker, InitializableChecker {
 
-    private final Log log;
-    private final ReportRenderer renderer;
+    private Log log;
+    private ReportRenderer renderer;
 
-    public PropertyPresenceChecker(Log log, ReportRenderer renderer) {
+    /** Constructeur par défaut pour SPI */
+    public PropertyPresenceChecker() {}
+
+    @Override
+    public void init(Log log,
+                     org.eclipse.aether.RepositorySystem repoSystem,
+                     org.eclipse.aether.RepositorySystemSession session,
+                     List<org.eclipse.aether.repository.RemoteRepository> remoteRepositories,
+                     ReportRenderer renderer) {
         this.log = log;
         this.renderer = renderer;
     }
 
     @Override
     public String getId() {
-        return "";
+        return "propertyPresence";
     }
 
     /**
      * Génère un rapport listant uniquement les propriétés manquantes dans le POM.
      *
-     * @param checkerContext           Le projet Maven à analyser.
-     * @return Rapport HTML/Markdown/texte selon le renderer.
+     * @param checkerContext Le contexte Maven (module courant, parent, etc.).
+     * @return Rapport formaté selon le renderer.
      */
     @Override
     public String generateReport(CheckerContext checkerContext) {
-
         StringBuilder report = new StringBuilder();
-        report.append(renderer.renderHeader3("🔧 Propriétés manquantes dans `" + checkerContext.getCurrentModule().getArtifactId() + "`"));
+        String artifactId = checkerContext.getCurrentModule().getArtifactId();
+
+        report.append(renderer.renderHeader3("🔧 Propriétés manquantes dans `" + artifactId + "`"));
         report.append(renderer.openIndentedSection());
 
         try {
@@ -48,7 +57,7 @@ public class PropertyPresenceChecker implements CustomChecker{
             for (String key : checkerContext.getPropertiesToCheck()) {
                 if (!props.containsKey(key)) {
                     log.warn("❌ [PropertyChecker] Propriété manquante : " + key);
-                    missing.add(new String[]{key, renderer.renderError("Manquante")});
+                    missing.add(new String[]{key, renderer.renderParagraph("Manquante")});
                 }
             }
 
@@ -68,11 +77,9 @@ public class PropertyPresenceChecker implements CustomChecker{
     }
 
     /**
-     * Génère un rapport d'erreur.
+     * Génère un rapport d'erreur en cas d'exception.
      */
     private String renderErrorReport(Exception e) {
-        String errorMessage = "❌ Une erreur est survenue : " + e.getMessage();
-        return renderer.renderError(errorMessage);
+        return renderer.renderError("❌ Une erreur est survenue : " + e.getMessage());
     }
-
 }

@@ -17,18 +17,17 @@ import java.util.List;
  * <p>Les modules attendus sont générés dynamiquement à partir de l’identifiant
  * du projet parent suivi d’un suffixe standard tel que {@code -api}, {@code -impl}, etc.</p>
  */
-public class ExpectedModulesChecker implements CustomChecker {
+public class ExpectedModulesChecker implements CustomChecker, BasicInitializableChecker {
 
-    private final Log log;
-    private final ReportRenderer renderer;
+    private Log log;
+    private ReportRenderer renderer;
 
-    /**
-     * Constructeur principal.
-     *
-     * @param log      Logger Maven
-     * @param renderer Renderer de rapport (Markdown, HTML, etc.)
-     */
-    public ExpectedModulesChecker(Log log, ReportRenderer renderer) {
+    /** Constructeur requis pour le chargement SPI */
+    public ExpectedModulesChecker() {
+    }
+
+    @Override
+    public void init(Log log, ReportRenderer renderer) {
         this.log = log;
         this.renderer = renderer;
     }
@@ -38,12 +37,6 @@ public class ExpectedModulesChecker implements CustomChecker {
         return "expectedModules";
     }
 
-    /**
-     * Génère un rapport de conformité des modules attendus dans un projet parent.
-     *
-     * @param checkerContext le contexte du checker
-     * @return un rapport de vérification au format du renderer fourni
-     */
     @Override
     public String generateReport(CheckerContext checkerContext) {
         String artifactId = checkerContext.getCurrentModule().getArtifactId();
@@ -51,6 +44,7 @@ public class ExpectedModulesChecker implements CustomChecker {
 
         report.append(renderer.renderHeader3("🧩 Vérification des modules du projet `" + artifactId + "`"));
         report.append(renderer.openIndentedSection());
+
         try {
             List<String> expectedModules = getExpectedModules(artifactId);
             List<String> missingModules = findMissingModules(checkerContext.getCurrentModule(), expectedModules);
@@ -61,18 +55,18 @@ public class ExpectedModulesChecker implements CustomChecker {
                 log.info("[ModuleChecker] " + successMessage);
             } else {
                 Collections.sort(missingModules);
-                report.append(renderer.renderParagraph("❌ Certains modules attendus sont absents ou non déclarés :"));
+                report.append(renderer.renderError("Certains modules attendus sont absents ou non déclarés :"));
 
                 String[][] rows = missingModules.stream()
                         .map(missing -> {
                             log.warn("[ModuleChecker] Module manquant : " + missing);
-                            return new String[]{ "❌ " + missing };
+                            return new String[]{ missing };
                         })
                         .toArray(String[][]::new);
 
                 report.append(renderer.renderTable(new String[]{"📦 Module manquant"}, rows));
-                report.append(renderer.renderWarning(
-                        "Vérifie que chaque module est présent sur le disque et déclaré dans la section `<modules>` du `pom.xml` parent."
+                report.append(renderer.renderParagraph(
+                        "💡 Vérifie que chaque module est présent sur le disque et déclaré dans la section `<modules>` du `pom.xml` parent."
                 ));
             }
 
@@ -81,16 +75,11 @@ public class ExpectedModulesChecker implements CustomChecker {
             report.append(renderer.renderError(errorMessage));
             log.error("[ModuleChecker] " + errorMessage, e);
         }
+
         report.append(renderer.closeIndentedSection());
         return report.toString();
     }
 
-    /**
-     * Définit la convention de nommage des modules attendus : {@code artifactId-suffix}.
-     *
-     * @param baseArtifactId le nom de base du projet parent
-     * @return liste complète des modules attendus
-     */
     private List<String> getExpectedModules(String baseArtifactId) {
         return List.of(
                 baseArtifactId + "-api",
@@ -99,26 +88,15 @@ public class ExpectedModulesChecker implements CustomChecker {
         );
     }
 
-    /**
-     * Vérifie quels modules sont absents physiquement ou non déclarés dans le pom parent.
-     *
-     * @param project         le projet Maven parent
-     * @param expectedModules liste des modules attendus
-     * @return liste des modules manquants ou non déclarés
-     */
     private List<String> findMissingModules(MavenProject project, List<String> expectedModules) {
         List<String> missing = new ArrayList<>();
-
         for (String module : expectedModules) {
             boolean isDeclared = project.getModules().contains(module);
             boolean existsOnDisk = new File(project.getBasedir(), module).exists();
-
             if (!isDeclared || !existsOnDisk) {
                 missing.add(module);
             }
         }
-
         return missing;
     }
-
 }

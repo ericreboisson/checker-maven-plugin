@@ -11,32 +11,28 @@ import java.util.List;
 
 /**
  * Vérifie que les dépendances d’un projet Maven ne contiennent pas de versions codées en dur dans le `pom.xml`.
- * <p>
- * Ce checker a pour objectif d’encourager l’usage de propriétés Maven dans la section {@code <properties>},
- * facilitant ainsi la maintenance, la montée de versions centralisée et les bonnes pratiques de configuration.
- * </p>
- *
- * <p>Le rapport est généré au format choisi (Markdown, HTML…) via une implémentation de {@link ReportRenderer}.</p>
- *
- * @author Eric
+ * Encourage l’usage de propriétés Maven pour une meilleure maintenabilité.
  */
-public class HardcodedVersionChecker implements CustomChecker{
+public class HardcodedVersionChecker implements CustomChecker, InitializableChecker {
 
     private static final String ANCHOR_ID = "hardcoded-versions";
 
-    private final Log log;
-    private final ReportRenderer renderer;
+    private Log log;
+    private ReportRenderer renderer;
 
-    /**
-     * Construit un checker des versions codées en dur.
-     *
-     * @param log      le logger Maven pour afficher les informations et avertissements
-     * @param renderer le renderer responsable de la génération du rapport (Markdown, HTML, etc.)
-     */
-    public HardcodedVersionChecker(Log log, ReportRenderer renderer) {
+    /** Constructeur sans argument pour l'utilisation via SPI */
+    public HardcodedVersionChecker() {}
+
+    @Override
+    public void init(Log log,
+                     org.eclipse.aether.RepositorySystem repoSystem,
+                     org.eclipse.aether.RepositorySystemSession session,
+                     List<org.eclipse.aether.repository.RemoteRepository> remoteRepositories,
+                     ReportRenderer renderer) {
         this.log = log;
         this.renderer = renderer;
     }
+
     @Override
     public String getId() {
         return "hardcodedVersion";
@@ -44,32 +40,24 @@ public class HardcodedVersionChecker implements CustomChecker{
 
     /**
      * Génère un rapport listant les dépendances dont les versions sont codées en dur.
-     *
-     * @param checkerContext le projet Maven à analyser
-     * @return une chaîne contenant le rapport formaté (Markdown, HTML, etc.)
      */
     @Override
     public String generateReport(CheckerContext checkerContext) {
-
         List<Dependency> hardcodedDeps = findHardcodedDependencies(checkerContext.getCurrentModule());
 
         if (hardcodedDeps.isEmpty()) {
-            // Ne rien afficher si tout est OK
             return "";
         }
 
         StringBuilder report = new StringBuilder();
+        String artifactId = checkerContext.getCurrentModule().getArtifactId();
 
-        // Rapport
-        report.append(renderer.renderHeader3("🧱 Versions codées en dur détectées dans `" + checkerContext.getCurrentModule().getArtifactId() + "`"));
+        report.append(renderer.renderHeader3("🧱 Versions codées en dur détectées dans `" + artifactId + "`"));
         report.append(renderer.openIndentedSection());
-
-
-        report.append(renderer.renderParagraph(
+        report.append(renderer.renderError(
                 "Les dépendances suivantes utilisent une version définie en dur dans le `pom.xml`, au lieu d’une propriété `${...}`.\n" +
                         "Cela nuit à la centralisation et à la maintenabilité des versions."));
 
-        // Table des dépendances concernées
         String[] headers = { "🏷️ Group ID", "📘 Artifact ID", "🔢 Version codée en dur" };
         String[][] rows = hardcodedDeps.stream()
                 .map(dep -> {
@@ -86,16 +74,13 @@ public class HardcodedVersionChecker implements CustomChecker{
         report.append(renderer.renderTable(headers, rows));
         report.append(renderer.renderParagraph(
                 "💡 Conseil : remplace chaque version codée en dur par une propriété Maven définie dans la section `<properties>` du parent."));
-
         report.append(renderer.closeIndentedSection());
+
         return report.toString();
     }
 
     /**
      * Recherche les dépendances définies avec une version codée en dur (non dynamique).
-     *
-     * @param project le projet Maven à inspecter
-     * @return une liste de dépendances avec une version fixe (non ${...})
      */
     private List<Dependency> findHardcodedDependencies(MavenProject project) {
         List<Dependency> result = new ArrayList<>();
@@ -114,6 +99,4 @@ public class HardcodedVersionChecker implements CustomChecker{
 
         return result;
     }
-
-
 }

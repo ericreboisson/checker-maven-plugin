@@ -16,19 +16,25 @@ import java.util.regex.Pattern;
  * Vérifie la présence de la balise <url> dans le fichier pom.xml et si l'URL est en HTTPS et répond correctement.
  * Ne génère de rapport que si des problèmes sont détectés.
  */
-public class UrlChecker implements CustomChecker {
+public class UrlChecker implements CustomChecker, BasicInitializableChecker {
 
-    private final Log log;
-    private final ReportRenderer renderer;
+    private Log log;
+    private ReportRenderer renderer;
 
-    public UrlChecker(Log log, ReportRenderer renderer) {
+    /** Constructeur requis pour le chargement SPI */
+    public UrlChecker() {
+        // Constructeur sans argument requis pour SPI
+    }
+
+    @Override
+    public void init(Log log, ReportRenderer renderer) {
         this.log = log;
         this.renderer = renderer;
     }
 
     @Override
     public String getId() {
-        return "";
+        return "urls";
     }
 
     /**
@@ -112,5 +118,4 @@ public class UrlChecker implements CustomChecker {
             return false;
         }
     }
-
 }

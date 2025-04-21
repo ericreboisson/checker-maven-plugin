@@ -25,19 +25,23 @@ import java.util.Objects;
  * Vérifie si la version du parent dans un fichier pom.xml est à jour.
  * Compare la version déclarée avec la dernière version stable disponible dans les repositories Maven.
  */
-public class ParentVersionChecker implements CustomChecker{
+public class ParentVersionChecker implements CustomChecker, InitializableChecker {
 
-    private final Log log;
-    private final RepositorySystem repoSystem;
-    private final RepositorySystemSession session;
-    private final List<RemoteRepository> remoteRepositories;
-    private final ReportRenderer renderer;
+    private Log log;
+    private RepositorySystem repoSystem;
+    private RepositorySystemSession session;
+    private List<RemoteRepository> remoteRepositories;
+    private ReportRenderer renderer;
 
-    public ParentVersionChecker(Log log,
-                                RepositorySystem repoSystem,
-                                RepositorySystemSession session,
-                                List<RemoteRepository> remoteRepositories,
-                                ReportRenderer renderer) {
+    /** Constructeur par défaut pour SPI */
+    public ParentVersionChecker() {}
+
+    @Override
+    public void init(Log log,
+                     RepositorySystem repoSystem,
+                     RepositorySystemSession session,
+                     List<RemoteRepository> remoteRepositories,
+                     ReportRenderer renderer) {
         this.log = log;
         this.repoSystem = repoSystem;
         this.session = session;
@@ -47,15 +51,9 @@ public class ParentVersionChecker implements CustomChecker{
 
     @Override
     public String getId() {
-        return "";
+        return "parentVersion";
     }
 
-    /**
-     * Génère un rapport indiquant si la version du parent est obsolète.
-     *
-     * @param checkerContext Le projet Maven à analyser.
-     * @return Un rapport formaté selon le renderer, ou une chaîne vide si aucun parent.
-     */
     @Override
     public String generateReport(CheckerContext checkerContext) {
         File pomFile = checkerContext.getCurrentModule().getFile();
@@ -89,9 +87,6 @@ public class ParentVersionChecker implements CustomChecker{
         }
     }
 
-    /**
-     * Vérifie si la version du parent est obsolète et génère un rapport.
-     */
     private String renderIfOutdated(Parent parent) {
         String currentVersion = parent.getVersion();
         String latestVersion = getLatestParentVersion(parent);
@@ -101,29 +96,20 @@ public class ParentVersionChecker implements CustomChecker{
             report.append(renderer.renderHeader3("👪 Version obsolète du parent détectée"));
             report.append(renderer.openIndentedSection());
 
-            report.append(renderer.renderParagraph(
-                    "Le fichier `pom.xml` utilise une version du parent qui n'est pas la plus récente disponible."));
+            report.append(renderer.renderWarning("Le fichier `pom.xml` utilise une version du parent qui n'est pas la plus récente disponible."));
 
             String[] headers = {"🏷️ Group ID", "📘 Artifact ID", "🕒 Version actuelle", "🚀 Dernière version stable"};
             String[][] rows = {{parent.getGroupId(), parent.getArtifactId(), currentVersion, latestVersion}};
             report.append(renderer.renderTable(headers, rows));
-            report.append(renderer.renderWarning(
-                    "Pensez à mettre à jour la version du parent pour bénéficier des dernières améliorations."));
+            report.append(renderer.renderParagraph("💡 Pensez à mettre à jour la version du parent pour bénéficier des dernières améliorations."));
 
             report.append(renderer.closeIndentedSection());
-
             return report.toString();
         }
 
         return ""; // Version actuelle à jour
     }
 
-    /**
-     * Récupère la dernière version stable (non-SNAPSHOT) du parent spécifié.
-     *
-     * @param parent L'élément parent à interroger.
-     * @return La dernière version stable disponible ou null en cas d'échec.
-     */
     public String getLatestParentVersion(Parent parent) {
         try {
             DefaultArtifact artifact = new DefaultArtifact(
@@ -143,10 +129,9 @@ public class ParentVersionChecker implements CustomChecker{
                     .orElse(null);
 
         } catch (Exception e) {
-            log.warn("Impossible de récupérer la dernière version pour le parent : "
-                    + parent.getGroupId() + ":" + parent.getArtifactId(), e);
+            log.warn("Impossible de récupérer la dernière version pour le parent : " +
+                    parent.getGroupId() + ":" + parent.getArtifactId(), e);
             return null;
         }
     }
-
 }

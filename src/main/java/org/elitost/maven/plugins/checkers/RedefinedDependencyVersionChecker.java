@@ -1,11 +1,11 @@
 package org.elitost.maven.plugins.checkers;
 
-import org.apache.maven.model.Dependency;
-import org.apache.maven.model.DependencyManagement;
-import org.apache.maven.plugin.logging.Log;
-import org.apache.maven.project.MavenProject;
 import org.elitost.maven.plugins.CheckerContext;
 import org.elitost.maven.plugins.renderers.ReportRenderer;
+import org.apache.maven.plugin.logging.Log;
+import org.apache.maven.model.Dependency;
+import org.apache.maven.model.DependencyManagement;
+import org.apache.maven.project.MavenProject;
 
 import java.util.*;
 
@@ -29,28 +29,26 @@ import java.util.*;
  *
  * Le rapport généré affiche un tableau comparant la version héritée et la version redéfinie.
  */
-public class RedefinedDependencyVersionChecker implements CustomChecker{
+public class RedefinedDependencyVersionChecker implements CustomChecker, BasicInitializableChecker {
 
-    private final Log log;
-    private final ReportRenderer renderer;
+    private Log log;
+    private ReportRenderer renderer;
 
-    /**
-     * Constructeur principal du checker.
-     *
-     * @param log      le logger Maven pour les messages d'information et d'avertissement.
-     * @param renderer le renderer utilisé pour générer le rapport (Markdown, HTML, etc.)
-     */
-    public RedefinedDependencyVersionChecker(Log log, ReportRenderer renderer) {
+    /** Constructeur requis pour le chargement SPI */
+    public RedefinedDependencyVersionChecker() {
+        // Constructeur sans argument requis pour SPI
+    }
+
+    @Override
+    public void init(Log log, ReportRenderer renderer) {
         this.log = log;
         this.renderer = renderer;
     }
 
     @Override
     public String getId() {
-        return "";
+        return "redefinedDependencyVersion";
     }
-
-
 
     /**
      * Génère un rapport des dépendances dont les versions redéfinissent celles déclarées dans le {@code <dependencyManagement>} du parent.
@@ -119,5 +117,4 @@ public class RedefinedDependencyVersionChecker implements CustomChecker{
         }
         return versions;
     }
-
 }

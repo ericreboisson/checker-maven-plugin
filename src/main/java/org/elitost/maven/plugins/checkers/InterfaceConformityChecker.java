@@ -36,25 +36,24 @@ import java.util.stream.Collectors;
  *
  * @author Eric
  */
-public class InterfaceConformityChecker implements CustomChecker{
+public class InterfaceConformityChecker implements CustomChecker, BasicInitializableChecker {
 
-    private final Log log;
-    private final ReportRenderer renderer;
+    private Log log;
+    private ReportRenderer renderer;
 
-    /**
-     * Constructeur principal.
-     *
-     * @param log      Logger Maven
-     * @param renderer Composant chargé de générer le rapport dans le format cible (Markdown, HTML, etc.)
-     */
-    public InterfaceConformityChecker(Log log, ReportRenderer renderer) {
+    public InterfaceConformityChecker() {
+        // Constructeur requis pour le chargement SPI
+    }
+
+    @Override
+    public void init(Log log, ReportRenderer renderer) {
         this.log = log;
         this.renderer = renderer;
     }
 
     @Override
     public String getId() {
-        return "";
+        return "interfaceConformity";
     }
 
     /**
@@ -67,16 +66,11 @@ public class InterfaceConformityChecker implements CustomChecker{
     @Override
     public String generateReport(CheckerContext checkerContext) {
         String artifactId = checkerContext.getCurrentModule().getArtifactId();
-        StringBuilder report = new StringBuilder();
-
-        report.append(renderer.renderHeader3("🧪 Conformité des interfaces de `" + artifactId + "`"));
-        report.append(renderer.openIndentedSection());
 
         List<String> interfaceNames = collectInterfaceNames(new File(checkerContext.getCurrentModule().getBasedir(), "src/main/java"));
         if (interfaceNames.isEmpty()) {
-            report.append(renderer.renderParagraph("✅ Aucune interface trouvée dans `" + artifactId + "`."));
-            report.append(renderer.closeIndentedSection());
-            return report.toString();
+            log.info("[InterfaceConformityChecker] Aucune interface détectée dans " + artifactId);
+            return ""; // ✅ Rien à signaler
         }
 
         Set<String> loggedInterfaces = findLoggedInterfaces(checkerContext.getRootProject());
@@ -87,13 +81,17 @@ public class InterfaceConformityChecker implements CustomChecker{
                 .collect(Collectors.toList());
 
         if (uncovered.isEmpty()) {
-            report.append(renderer.renderParagraph("✅ Toutes les interfaces sont référencées via `ClassInspector.logClassName(...)`."));
-        } else {
-            report.append(renderer.renderWarning("Interfaces non testées par `ClassInspector.logClassName(...)` :"));
-            report.append(renderer.renderTable(new String[]{"Interface non testée"}, uncovered.toArray(new String[0][])));
+            log.info("[InterfaceConformityChecker] Toutes les interfaces de " + artifactId + " sont couvertes.");
+            return ""; // ✅ Tout est OK → pas de rapport
         }
 
+        StringBuilder report = new StringBuilder();
+        report.append(renderer.renderHeader3("🧪 Conformité des interfaces de `" + artifactId + "`"));
+        report.append(renderer.openIndentedSection());
+        report.append(renderer.renderWarning("Interfaces non testées par `ClassInspector.logClassName(...)` :"));
+        report.append(renderer.renderTable(new String[]{"Interface non testée"}, uncovered.toArray(new String[0][])));
         report.append(renderer.closeIndentedSection());
+
         return report.toString();
     }
 
@@ -194,5 +192,4 @@ public class InterfaceConformityChecker implements CustomChecker{
         }
         return results;
     }
-
 }

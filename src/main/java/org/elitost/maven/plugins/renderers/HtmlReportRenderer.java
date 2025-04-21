@@ -50,17 +50,17 @@ public class HtmlReportRenderer implements ReportRenderer {
 
     @Override
     public String renderWarning(String text) {
-        return "<div class='warning'>⚠️ " + escapeHtml(text) + "</div>\n";
+        return "<div class='warning'><p>⚠️ " + escapeHtml(text) + "</p></div>\n";
     }
 
     @Override
     public String renderInfo(String text) {
-        return "<div class='info'>ℹ️ " + escapeHtml(text) + "</div>\n";
+        return "<div class='info'><p>ℹ️ " + escapeHtml(text) + "</p></div>\n";
     }
 
     @Override
     public String renderError(String text) {
-        return "<div class='error'>❌ " + escapeHtml(text) + "</div>\n";
+        return "<div class='error'><p>❌ " + escapeHtml(text) + "</p></div>\n";
     }
 
     public String openIndentedSection() {
