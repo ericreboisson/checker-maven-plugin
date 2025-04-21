@@ -1,5 +1,6 @@
 package org.elitost.maven.plugins.checkers;
 
+import org.elitost.maven.plugins.CheckerContext;
 import org.elitost.maven.plugins.renderers.ReportRenderer;
 import org.apache.maven.model.Dependency;
 import org.apache.maven.plugin.logging.Log;
@@ -14,7 +15,7 @@ import java.util.stream.Collectors;
 /**
  * Analyseur de dépendances potentiellement non utilisées dans le code source Java.
  */
-public class UnusedDependenciesChecker {
+public class UnusedDependenciesChecker implements CustomChecker {
 
     private final Log log;
     private final ReportRenderer renderer;
@@ -25,27 +26,33 @@ public class UnusedDependenciesChecker {
         log.debug("[UnusedDependenciesChecker] Initialisé");
     }
 
+    @Override
+    public String getId() {
+        return "";
+    }
+
     /**
      * Génère un rapport sur les dépendances probablement inutilisées dans le module.
      *
-     * @param project Le projet Maven à analyser.
+     * @param checkerContext Le projet Maven à analyser.
      * @return Rapport au format Markdown (ou HTML selon le renderer utilisé).
      */
-    public String generateReport(MavenProject project) {
-        log.info("[UnusedDependenciesChecker] Analyse des dépendances pour le module : " + project.getArtifactId());
+    @Override
+    public String generateReport(CheckerContext checkerContext) {
+        log.info("[UnusedDependenciesChecker] Analyse des dépendances pour le module : " + checkerContext.getCurrentModule().getArtifactId());
 
         // 📂 Lecture de tous les fichiers Java
-        List<File> javaFiles = collectJavaFiles(new File(project.getBasedir(), "src/main/java"));
+        List<File> javaFiles = collectJavaFiles(new File(checkerContext.getCurrentModule().getBasedir(), "src/main/java"));
         String fullJavaSource = javaFiles.stream()
                 .map(this::readFileContent)
                 .collect(Collectors.joining("\n"))
                 .toLowerCase(); // Pour une comparaison insensible à la casse
 
         // 🔍 Détection des dépendances non utilisées
-        List<Dependency> unusedDependencies = analyzeDependencyUsage(project, fullJavaSource);
+        List<Dependency> unusedDependencies = analyzeDependencyUsage(checkerContext.getCurrentModule(), fullJavaSource);
 
         // 📝 Génération du rapport
-        return renderReport(project, unusedDependencies);
+        return renderReport(checkerContext.getCurrentModule(), unusedDependencies);
     }
 
     /**
@@ -150,4 +157,5 @@ public class UnusedDependenciesChecker {
         hints.put("org.slf4j:slf4j-api", List.of("org.slf4j", "logger", "loggerfactory"));
         return hints;
     }
+
 }

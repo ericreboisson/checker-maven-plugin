@@ -1,5 +1,6 @@
 package org.elitost.maven.plugins.checkers;
 
+import org.elitost.maven.plugins.CheckerContext;
 import org.elitost.maven.plugins.renderers.ReportRenderer;
 import org.apache.maven.plugin.logging.Log;
 import org.apache.maven.project.MavenProject;
@@ -12,7 +13,7 @@ import java.util.Properties;
  * Vérifie la présence de propriétés spécifiques dans un projet Maven.
  * Génère un rapport listant uniquement les propriétés manquantes.
  */
-public class PropertyPresenceChecker {
+public class PropertyPresenceChecker implements CustomChecker{
 
     private final Log log;
     private final ReportRenderer renderer;
@@ -22,23 +23,29 @@ public class PropertyPresenceChecker {
         this.renderer = renderer;
     }
 
+    @Override
+    public String getId() {
+        return "";
+    }
+
     /**
      * Génère un rapport listant uniquement les propriétés manquantes dans le POM.
      *
-     * @param project           Le projet Maven à analyser.
-     * @param propertiesToCheck Liste des clés de propriétés à vérifier.
+     * @param checkerContext           Le projet Maven à analyser.
      * @return Rapport HTML/Markdown/texte selon le renderer.
      */
-    public String generatePropertiesCheckReport(MavenProject project, List<String> propertiesToCheck) {
+    @Override
+    public String generateReport(CheckerContext checkerContext) {
+
         StringBuilder report = new StringBuilder();
-        report.append(renderer.renderHeader3("🔧 Propriétés manquantes dans `" + project.getArtifactId() + "`"));
+        report.append(renderer.renderHeader3("🔧 Propriétés manquantes dans `" + checkerContext.getCurrentModule().getArtifactId() + "`"));
         report.append(renderer.openIndentedSection());
 
         try {
-            Properties props = project.getProperties();
+            Properties props = checkerContext.getCurrentModule().getProperties();
             List<String[]> missing = new ArrayList<>();
 
-            for (String key : propertiesToCheck) {
+            for (String key : checkerContext.getPropertiesToCheck()) {
                 if (!props.containsKey(key)) {
                     log.warn("❌ [PropertyChecker] Propriété manquante : " + key);
                     missing.add(new String[]{key, renderer.renderError("Manquante")});
@@ -67,4 +74,5 @@ public class PropertyPresenceChecker {
         String errorMessage = "❌ Une erreur est survenue : " + e.getMessage();
         return renderer.renderError(errorMessage);
     }
+
 }

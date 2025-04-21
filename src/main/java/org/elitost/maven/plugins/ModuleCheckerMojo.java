@@ -58,6 +58,9 @@ public class ModuleCheckerMojo extends AbstractMojo {
 
     @Override
     public void execute() throws MojoExecutionException {
+
+
+
         this.log = getLog();
 
         if (!isParentPom()) {
@@ -120,60 +123,61 @@ public class ModuleCheckerMojo extends AbstractMojo {
     }
 
     private String generateReportContent(MavenProject module, ReportRenderer renderer) {
+
+        CheckerContext checkerContext = new CheckerContext(module, project, propertiesToCheck);
+
         StringBuilder content = new StringBuilder();
         content.append(renderer.renderHeader2("Module : " + module.getArtifactId()));
 
         if (isTopLevelProject(module) && (runAll || checkersToRun.contains("expectedModules"))) {
-            content.append(expectedModulesChecker.generateModuleCheckReport(module)).append("\n");
+            content.append(expectedModulesChecker.generateReport(checkerContext)).append("\n");
         }
 
         if (runAll || checkersToRun.contains("parentVersion")) {
-            content.append(parentChecker.generateParentVersionReport(module)).append("\n");
+            content.append(parentChecker.generateReport(checkerContext)).append("\n");
         }
 
         if (isTopLevelProject(module) && (runAll || checkersToRun.contains("propertyPresence"))) {
-            content.append(propertyPresenceChecker.generatePropertiesCheckReport(module, propertiesToCheck)).append("\n");
+            content.append(propertyPresenceChecker.generateReport(checkerContext)).append("\n");
         }
 
         if (runAll || checkersToRun.contains("interfaceConformity")) {
             if (module.getArtifactId().endsWith("-api")) {
-                content.append(interfaceConformityChecker.generateReport(module, project)).append("\n");
+                content.append(interfaceConformityChecker.generateReport(checkerContext)).append("\n");
             }
         }
-        runCommonCheckers(module, renderer, content);
+        if (runAll || checkersToRun.contains("hardcodedVersion")) {
+            content.append(hardcodedChecker.generateReport(checkerContext)).append("\n");
+        }
+
+        if (runAll || checkersToRun.contains("outdatedDependencies")) {
+            content.append(updateChecker.generateReport(checkerContext));
+        }
+
+        if (runAll || checkersToRun.contains("commentedTags")) {
+            content.append(commentedTagsChecker.generateReport(checkerContext));
+        }
+
+        if (runAll || checkersToRun.contains("redundantProperties")) {
+            content.append(redundantChecker.generateReport(checkerContext)).append("\n");
+        }
+
+        if (runAll || checkersToRun.contains("unusedDependencies")) {
+            content.append(unusedDependenciesChecker.generateReport(checkerContext)).append("\n");
+        }
+
+        if (runAll || checkersToRun.contains("dependenciesRedefinition")) {
+            content.append(redefinitionChecker.generateReport(checkerContext)).append("\n");
+        }
+
+        if (runAll || checkersToRun.contains("urls")) {
+            content.append(urlChecker.generateReport(checkerContext)).append("\n");
+        }
 
         return content.toString();
     }
 
-    private void runCommonCheckers(MavenProject module, ReportRenderer renderer, StringBuilder content) {
-        if (runAll || checkersToRun.contains("hardcodedVersion")) {
-            content.append(hardcodedChecker.generateHardcodedVersionReport(module)).append("\n");
-        }
 
-        if (runAll || checkersToRun.contains("outdatedDependencies")) {
-            content.append(updateChecker.generateOutdatedDependenciesReport(module.getOriginalModel().getDependencies()));
-        }
-
-        if (runAll || checkersToRun.contains("commentedTags")) {
-            content.append(commentedTagsChecker.generateCommentedTagsReport(module));
-        }
-
-        if (runAll || checkersToRun.contains("redundantProperties")) {
-            content.append(redundantChecker.generateRedundantPropertiesReport(module)).append("\n");
-        }
-
-        if (runAll || checkersToRun.contains("unusedDependencies")) {
-            content.append(unusedDependenciesChecker.generateReport(module)).append("\n");
-        }
-
-        if (runAll || checkersToRun.contains("dependenciesRedefinition")) {
-            content.append(redefinitionChecker.generateRedefinitionReport(module)).append("\n");
-        }
-
-        if (runAll || checkersToRun.contains("urls")) {
-            content.append(urlChecker.generateUrlCheckReport(module)).append("\n");
-        }
-    }
 
     private void writeReport(String content) throws MojoExecutionException {
         String ext = format != null && !format.isEmpty() ? format.get(0).toLowerCase() : "md";

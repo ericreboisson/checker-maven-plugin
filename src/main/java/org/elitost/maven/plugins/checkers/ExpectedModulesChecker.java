@@ -1,5 +1,6 @@
 package org.elitost.maven.plugins.checkers;
 
+import org.elitost.maven.plugins.CheckerContext;
 import org.elitost.maven.plugins.renderers.ReportRenderer;
 import org.apache.maven.plugin.logging.Log;
 import org.apache.maven.project.MavenProject;
@@ -16,7 +17,7 @@ import java.util.List;
  * <p>Les modules attendus sont générés dynamiquement à partir de l’identifiant
  * du projet parent suivi d’un suffixe standard tel que {@code -api}, {@code -impl}, etc.</p>
  */
-public class ExpectedModulesChecker {
+public class ExpectedModulesChecker implements CustomChecker {
 
     private final Log log;
     private final ReportRenderer renderer;
@@ -32,21 +33,27 @@ public class ExpectedModulesChecker {
         this.renderer = renderer;
     }
 
+    @Override
+    public String getId() {
+        return "expectedModules";
+    }
+
     /**
      * Génère un rapport de conformité des modules attendus dans un projet parent.
      *
-     * @param project le projet Maven parent
+     * @param checkerContext le contexte du checker
      * @return un rapport de vérification au format du renderer fourni
      */
-    public String generateModuleCheckReport(MavenProject project) {
-        String artifactId = project.getArtifactId();
+    @Override
+    public String generateReport(CheckerContext checkerContext) {
+        String artifactId = checkerContext.getCurrentModule().getArtifactId();
         StringBuilder report = new StringBuilder();
 
         report.append(renderer.renderHeader3("🧩 Vérification des modules du projet `" + artifactId + "`"));
         report.append(renderer.openIndentedSection());
         try {
             List<String> expectedModules = getExpectedModules(artifactId);
-            List<String> missingModules = findMissingModules(project, expectedModules);
+            List<String> missingModules = findMissingModules(checkerContext.getCurrentModule(), expectedModules);
 
             if (missingModules.isEmpty()) {
                 String successMessage = "✅ Tous les modules attendus sont présents et correctement déclarés.";
@@ -113,4 +120,5 @@ public class ExpectedModulesChecker {
 
         return missing;
     }
+
 }

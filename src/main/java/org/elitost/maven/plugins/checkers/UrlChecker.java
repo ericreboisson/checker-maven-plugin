@@ -1,5 +1,6 @@
 package org.elitost.maven.plugins.checkers;
 
+import org.elitost.maven.plugins.CheckerContext;
 import org.elitost.maven.plugins.renderers.ReportRenderer;
 import org.apache.maven.plugin.logging.Log;
 import org.apache.maven.project.MavenProject;
@@ -15,7 +16,7 @@ import java.util.regex.Pattern;
  * Vérifie la présence de la balise <url> dans le fichier pom.xml et si l'URL est en HTTPS et répond correctement.
  * Ne génère de rapport que si des problèmes sont détectés.
  */
-public class UrlChecker {
+public class UrlChecker implements CustomChecker {
 
     private final Log log;
     private final ReportRenderer renderer;
@@ -25,19 +26,26 @@ public class UrlChecker {
         this.renderer = renderer;
     }
 
+    @Override
+    public String getId() {
+        return "";
+    }
+
     /**
      * Génère un rapport **uniquement s’il y a un problème** lié à la balise <url>.
      *
-     * @param project le projet Maven
+     * @param checkerContext le projet Maven
      * @return un rapport d'erreur ou une chaîne vide si tout est conforme
      */
-    public String generateUrlCheckReport(MavenProject project) {
-        String artifactId = project.getArtifactId();
+    @Override
+    public String generateReport(CheckerContext checkerContext) {
+
+        String artifactId = checkerContext.getCurrentModule().getArtifactId();
         StringBuilder report = new StringBuilder();
         boolean hasIssue = false;
 
         try {
-            String url = extractUrlFromPom(project.getFile());
+            String url = extractUrlFromPom(checkerContext.getCurrentModule().getFile());
 
             if (url == null || url.isBlank()) {
                 hasIssue = true;
@@ -104,4 +112,5 @@ public class UrlChecker {
             return false;
         }
     }
+
 }

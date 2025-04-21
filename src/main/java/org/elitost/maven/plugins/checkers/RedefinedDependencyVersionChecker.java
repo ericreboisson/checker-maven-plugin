@@ -4,6 +4,7 @@ import org.apache.maven.model.Dependency;
 import org.apache.maven.model.DependencyManagement;
 import org.apache.maven.plugin.logging.Log;
 import org.apache.maven.project.MavenProject;
+import org.elitost.maven.plugins.CheckerContext;
 import org.elitost.maven.plugins.renderers.ReportRenderer;
 
 import java.util.*;
@@ -28,7 +29,7 @@ import java.util.*;
  *
  * Le rapport généré affiche un tableau comparant la version héritée et la version redéfinie.
  */
-public class RedefinedDependencyVersionChecker {
+public class RedefinedDependencyVersionChecker implements CustomChecker{
 
     private final Log log;
     private final ReportRenderer renderer;
@@ -44,20 +45,28 @@ public class RedefinedDependencyVersionChecker {
         this.renderer = renderer;
     }
 
+    @Override
+    public String getId() {
+        return "";
+    }
+
+
+
     /**
      * Génère un rapport des dépendances dont les versions redéfinissent celles déclarées dans le {@code <dependencyManagement>} du parent.
      *
-     * @param project le projet Maven à analyser
+     * @param checkerContext le projet Maven à analyser
      * @return le contenu du rapport au format du renderer, ou une chaîne vide si aucun conflit détecté
      */
-    public String generateRedefinitionReport(MavenProject project) {
+    @Override
+    public String generateReport(CheckerContext checkerContext) {
         StringBuilder report = new StringBuilder();
 
         try {
-            Map<String, String> inheritedVersions = getManagedDependencyVersions(project.getParent());
+            Map<String, String> inheritedVersions = getManagedDependencyVersions(checkerContext.getCurrentModule().getParent());
             List<String[]> redefined = new ArrayList<>();
 
-            for (Dependency dep : project.getDependencies()) {
+            for (Dependency dep : checkerContext.getCurrentModule().getDependencies()) {
                 String key = dep.getGroupId() + ":" + dep.getArtifactId();
                 String declaredVersion = dep.getVersion();
                 String inheritedVersion = inheritedVersions.get(key);
@@ -69,7 +78,7 @@ public class RedefinedDependencyVersionChecker {
             }
 
             if (!redefined.isEmpty()) {
-                report.append(renderer.renderHeader3("🔁 Dépendances redéfinies dans `" + project.getArtifactId() + "`"));
+                report.append(renderer.renderHeader3("🔁 Dépendances redéfinies dans `" + checkerContext.getCurrentModule().getArtifactId() + "`"));
                 report.append(renderer.openIndentedSection());
                 report.append(renderer.renderParagraph(
                         "⚠️ Certaines dépendances redéfinissent une version différente de celle héritée :"
@@ -110,4 +119,5 @@ public class RedefinedDependencyVersionChecker {
         }
         return versions;
     }
+
 }

@@ -1,5 +1,6 @@
 package org.elitost.maven.plugins.checkers;
 
+import org.elitost.maven.plugins.CheckerContext;
 import org.elitost.maven.plugins.renderers.ReportRenderer;
 import org.apache.maven.model.Model;
 import org.apache.maven.plugin.logging.Log;
@@ -13,7 +14,7 @@ import java.util.*;
  * Analyseur de propriétés redondantes dans un fichier pom.xml :
  * Détecte les propriétés définies dans un module mais jamais utilisées dans aucun pom du projet.
  */
-public class RedundantPropertiesChecker {
+public class RedundantPropertiesChecker implements CustomChecker{
 
     private final Log log;
     private final ReportRenderer renderer;
@@ -23,15 +24,21 @@ public class RedundantPropertiesChecker {
         this.renderer = renderer;
     }
 
+    @Override
+    public String getId() {
+        return "";
+    }
+
     /**
      * Génère un rapport listant les propriétés définies dans ce module mais non utilisées dans le projet.
      *
-     * @param project Le projet Maven (racine ou module) à analyser.
+     * @param checkerContext Le projet Maven (racine ou module) à analyser.
      * @return Rapport formaté (Markdown, HTML...) ou chaîne vide si tout est utilisé.
      */
-    public String generateRedundantPropertiesReport(MavenProject project) {
-        String artifactId = project.getArtifactId();
-        Properties definedProperties = Optional.ofNullable(project.getOriginalModel())
+    @Override
+    public String generateReport(CheckerContext checkerContext) {
+        String artifactId = checkerContext.getCurrentModule().getArtifactId();
+        Properties definedProperties = Optional.ofNullable(checkerContext.getCurrentModule().getOriginalModel())
                 .map(Model::getProperties)
                 .orElse(new Properties());
 
@@ -40,7 +47,7 @@ public class RedundantPropertiesChecker {
             return "";
         }
 
-        List<File> pomFiles = collectAllPomFiles(project);
+        List<File> pomFiles = collectAllPomFiles(checkerContext.getCurrentModule());
         String combinedPomContent = readAllPomContents(pomFiles);
 
         List<String[]> unusedProperties = new ArrayList<>();
@@ -108,4 +115,5 @@ public class RedundantPropertiesChecker {
 
         return report.toString();
     }
+
 }

@@ -2,6 +2,7 @@ package org.elitost.maven.plugins.checkers;
 
 import org.apache.maven.plugin.logging.Log;
 import org.apache.maven.project.MavenProject;
+import org.elitost.maven.plugins.CheckerContext;
 import org.elitost.maven.plugins.renderers.ReportRenderer;
 
 import java.io.File;
@@ -35,7 +36,7 @@ import java.util.stream.Collectors;
  *
  * @author Eric
  */
-public class InterfaceConformityChecker {
+public class InterfaceConformityChecker implements CustomChecker{
 
     private final Log log;
     private final ReportRenderer renderer;
@@ -51,29 +52,34 @@ public class InterfaceConformityChecker {
         this.renderer = renderer;
     }
 
+    @Override
+    public String getId() {
+        return "";
+    }
+
     /**
      * Génère un rapport listant les interfaces Java non référencées dans des appels
      * à <code>ClassInspector.logClassName(...)</code> dans les tests.
      *
-     * @param apiProject  Projet Maven contenant les interfaces (généralement le module <code>-api</code>)
-     * @param rootProject Projet racine, utilisé pour scanner tous les tests des sous-modules
+     * @param checkerContext  Projet Maven contenant les interfaces (généralement le module <code>-api</code>)
      * @return Chaîne représentant le rapport complet formaté via le {@link ReportRenderer}
      */
-    public String generateReport(MavenProject apiProject, MavenProject rootProject) {
-        String artifactId = apiProject.getArtifactId();
+    @Override
+    public String generateReport(CheckerContext checkerContext) {
+        String artifactId = checkerContext.getCurrentModule().getArtifactId();
         StringBuilder report = new StringBuilder();
 
         report.append(renderer.renderHeader3("🧪 Conformité des interfaces de `" + artifactId + "`"));
         report.append(renderer.openIndentedSection());
 
-        List<String> interfaceNames = collectInterfaceNames(new File(apiProject.getBasedir(), "src/main/java"));
+        List<String> interfaceNames = collectInterfaceNames(new File(checkerContext.getCurrentModule().getBasedir(), "src/main/java"));
         if (interfaceNames.isEmpty()) {
             report.append(renderer.renderParagraph("✅ Aucune interface trouvée dans `" + artifactId + "`."));
             report.append(renderer.closeIndentedSection());
             return report.toString();
         }
 
-        Set<String> loggedInterfaces = findLoggedInterfaces(rootProject);
+        Set<String> loggedInterfaces = findLoggedInterfaces(checkerContext.getRootProject());
 
         List<String[]> uncovered = interfaceNames.stream()
                 .filter(iface -> !loggedInterfaces.contains(iface))
@@ -83,7 +89,7 @@ public class InterfaceConformityChecker {
         if (uncovered.isEmpty()) {
             report.append(renderer.renderParagraph("✅ Toutes les interfaces sont référencées via `ClassInspector.logClassName(...)`."));
         } else {
-            report.append(renderer.renderWarning("Interfaces non référencées par `ClassInspector.logClassName(...)` :"));
+            report.append(renderer.renderWarning("Interfaces non testées par `ClassInspector.logClassName(...)` :"));
             report.append(renderer.renderTable(new String[]{"Interface non testée"}, uncovered.toArray(new String[0][])));
         }
 
@@ -188,4 +194,5 @@ public class InterfaceConformityChecker {
         }
         return results;
     }
+
 }

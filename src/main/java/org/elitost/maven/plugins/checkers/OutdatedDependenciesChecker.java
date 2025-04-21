@@ -1,5 +1,6 @@
 package org.elitost.maven.plugins.checkers;
 
+import org.elitost.maven.plugins.CheckerContext;
 import org.elitost.maven.plugins.renderers.ReportRenderer;
 import org.apache.maven.model.Dependency;
 import org.apache.maven.plugin.logging.Log;
@@ -25,7 +26,7 @@ import java.util.List;
  *
  * @author Eric
  */
-public class OutdatedDependenciesChecker {
+public class OutdatedDependenciesChecker implements CustomChecker{
 
     private static final String ANCHOR_ID = "dependency-updates";
 
@@ -56,16 +57,23 @@ public class OutdatedDependenciesChecker {
         this.renderer = renderer;
     }
 
+    @Override
+    public String getId() {
+        return "";
+    }
+
     /**
      * Génère un rapport listant les dépendances obsolètes, c’est-à-dire celles pour lesquelles une version stable
      * plus récente est disponible dans les dépôts Maven.
      *
-     * @param dependencies la liste des dépendances à analyser
+     * @param checkerContext la liste des dépendances à analyser
      * @return le contenu du rapport au format souhaité (Markdown, HTML, etc.)
      */
-    public String generateOutdatedDependenciesReport(List<Dependency> dependencies) {
+    @Override
+    public String generateReport(CheckerContext checkerContext) {
+
         StringBuilder report = new StringBuilder();
-        List<String[]> outdated = checkForUpdates(dependencies);
+        List<String[]> outdated = checkForUpdates(checkerContext.getCurrentModule().getOriginalModel().getDependencies());
 
         if (!outdated.isEmpty()) {
             report.append(renderer.renderHeader3("📦 Dépendances obsolètes détectées"));
@@ -143,4 +151,6 @@ public class OutdatedDependenciesChecker {
         request.setRepositories(remoteRepositories);
         return request;
     }
+
+
 }

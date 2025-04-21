@@ -1,5 +1,6 @@
 package org.elitost.maven.plugins.checkers;
 
+import org.elitost.maven.plugins.CheckerContext;
 import org.elitost.maven.plugins.renderers.ReportRenderer;
 import org.apache.maven.model.Dependency;
 import org.apache.maven.plugin.logging.Log;
@@ -19,7 +20,7 @@ import java.util.List;
  *
  * @author Eric
  */
-public class HardcodedVersionChecker {
+public class HardcodedVersionChecker implements CustomChecker{
 
     private static final String ANCHOR_ID = "hardcoded-versions";
 
@@ -36,15 +37,21 @@ public class HardcodedVersionChecker {
         this.log = log;
         this.renderer = renderer;
     }
+    @Override
+    public String getId() {
+        return "hardcodedVersion";
+    }
 
     /**
      * Génère un rapport listant les dépendances dont les versions sont codées en dur.
      *
-     * @param project le projet Maven à analyser
+     * @param checkerContext le projet Maven à analyser
      * @return une chaîne contenant le rapport formaté (Markdown, HTML, etc.)
      */
-    public String generateHardcodedVersionReport(MavenProject project) {
-        List<Dependency> hardcodedDeps = findHardcodedDependencies(project);
+    @Override
+    public String generateReport(CheckerContext checkerContext) {
+
+        List<Dependency> hardcodedDeps = findHardcodedDependencies(checkerContext.getCurrentModule());
 
         if (hardcodedDeps.isEmpty()) {
             // Ne rien afficher si tout est OK
@@ -54,7 +61,7 @@ public class HardcodedVersionChecker {
         StringBuilder report = new StringBuilder();
 
         // Rapport
-        report.append(renderer.renderHeader3("🧱 Versions codées en dur détectées dans `" + project.getArtifactId() + "`"));
+        report.append(renderer.renderHeader3("🧱 Versions codées en dur détectées dans `" + checkerContext.getCurrentModule().getArtifactId() + "`"));
         report.append(renderer.openIndentedSection());
 
 
@@ -78,7 +85,7 @@ public class HardcodedVersionChecker {
 
         report.append(renderer.renderTable(headers, rows));
         report.append(renderer.renderParagraph(
-                "💡 Conseil : remplace chaque version codée en dur par une propriété Maven définie dans la section `<properties>` du parent ou d’un BOM."));
+                "💡 Conseil : remplace chaque version codée en dur par une propriété Maven définie dans la section `<properties>` du parent."));
 
         report.append(renderer.closeIndentedSection());
         return report.toString();
@@ -107,4 +114,6 @@ public class HardcodedVersionChecker {
 
         return result;
     }
+
+
 }

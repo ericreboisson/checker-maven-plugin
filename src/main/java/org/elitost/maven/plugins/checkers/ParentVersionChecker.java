@@ -1,5 +1,6 @@
 package org.elitost.maven.plugins.checkers;
 
+import org.elitost.maven.plugins.CheckerContext;
 import org.elitost.maven.plugins.renderers.ReportRenderer;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.Parent;
@@ -24,7 +25,7 @@ import java.util.Objects;
  * Vérifie si la version du parent dans un fichier pom.xml est à jour.
  * Compare la version déclarée avec la dernière version stable disponible dans les repositories Maven.
  */
-public class ParentVersionChecker {
+public class ParentVersionChecker implements CustomChecker{
 
     private final Log log;
     private final RepositorySystem repoSystem;
@@ -44,16 +45,22 @@ public class ParentVersionChecker {
         this.renderer = renderer;
     }
 
+    @Override
+    public String getId() {
+        return "";
+    }
+
     /**
      * Génère un rapport indiquant si la version du parent est obsolète.
      *
-     * @param project Le projet Maven à analyser.
+     * @param checkerContext Le projet Maven à analyser.
      * @return Un rapport formaté selon le renderer, ou une chaîne vide si aucun parent.
      */
-    public String generateParentVersionReport(MavenProject project) {
-        File pomFile = project.getFile();
+    @Override
+    public String generateReport(CheckerContext checkerContext) {
+        File pomFile = checkerContext.getCurrentModule().getFile();
         if (pomFile == null || !pomFile.exists()) {
-            log.warn("Fichier pom.xml introuvable pour le projet " + project.getName());
+            log.warn("Fichier pom.xml introuvable pour le projet " + checkerContext.getCurrentModule().getName());
             return "";
         }
 
@@ -62,12 +69,12 @@ public class ParentVersionChecker {
             Parent parent = model.getParent();
 
             if (parent == null) {
-                log.error("Aucun parent défini pour le projet " + project.getName());
+                log.error("Aucun parent défini pour le projet " + checkerContext.getCurrentModule().getName());
 
                 StringBuilder report = new StringBuilder();
                 report.append(renderer.renderHeader3("👪 Absence de parent Maven détectée"));
                 report.append(renderer.openIndentedSection());
-                report.append(renderer.renderError("Aucun parent défini pour le projet `" + project.getName() + "`."));
+                report.append(renderer.renderError("Aucun parent défini pour le projet `" + checkerContext.getCurrentModule().getName() + "`."));
                 report.append(renderer.renderInfo("Si ce module est censé hériter d’un `pom` parent, vérifiez la configuration de l’élément `<parent>`."));
                 report.append(renderer.closeIndentedSection());
 
@@ -77,7 +84,7 @@ public class ParentVersionChecker {
             return renderIfOutdated(parent);
 
         } catch (Exception e) {
-            log.error("Erreur lors de l'analyse du parent dans le pom.xml du projet " + project.getName(), e);
+            log.error("Erreur lors de l'analyse du parent dans le pom.xml du projet " + checkerContext.getCurrentModule().getName(), e);
             return renderer.renderError("Erreur lors de l'analyse du parent : " + e.getMessage());
         }
     }
@@ -141,4 +148,5 @@ public class ParentVersionChecker {
             return null;
         }
     }
+
 }

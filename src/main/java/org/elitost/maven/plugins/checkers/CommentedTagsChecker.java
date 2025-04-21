@@ -1,5 +1,6 @@
 package org.elitost.maven.plugins.checkers;
 
+import org.elitost.maven.plugins.CheckerContext;
 import org.elitost.maven.plugins.renderers.ReportRenderer;
 import org.apache.maven.plugin.logging.Log;
 import org.apache.maven.project.MavenProject;
@@ -17,7 +18,7 @@ import java.util.regex.Pattern;
  *
  * Exemples : <dependencies>, <build>, <plugins>, etc.
  */
-public class CommentedTagsChecker {
+public class CommentedTagsChecker implements CustomChecker{
 
     private static final Set<String> TAG_WHITELIST = Set.of(
             "modelVersion", "parent", "groupId", "artifactId", "version", "packaging", "name", "description", "url",
@@ -37,6 +38,10 @@ public class CommentedTagsChecker {
         this.log = log;
         this.renderer = renderer;
     }
+    @Override
+    public String getId() {
+        return "commentedTags";
+    }
 
     /**
      * Génère un rapport listant les blocs XML significatifs commentés dans le pom.xml du projet.
@@ -44,10 +49,11 @@ public class CommentedTagsChecker {
      * @param project Le projet Maven à analyser
      * @return Rapport au format string (Markdown ou HTML selon renderer), ou vide si rien à signaler.
      */
-    public String generateCommentedTagsReport(MavenProject project) {
-        File pomFile = new File(project.getBasedir(), "pom.xml");
+    @Override
+    public String generateReport(CheckerContext checkerContext) {
+        File pomFile = new File(checkerContext.getCurrentModule().getBasedir(), "pom.xml");
         if (!pomFile.exists()) {
-            String errorMsg = "Impossible de trouver le fichier pom.xml de " + project.getArtifactId();
+            String errorMsg = "Impossible de trouver le fichier pom.xml de " + checkerContext.getCurrentModule().getArtifactId();
             log.warn("[CommentedTagsChecker] " + errorMsg);
             return renderer.renderError(errorMsg);
         }
