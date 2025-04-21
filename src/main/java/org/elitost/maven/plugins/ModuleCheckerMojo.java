@@ -11,37 +11,21 @@ import org.eclipse.aether.repository.RemoteRepository;
 import org.elitost.maven.plugins.checkers.BasicInitializableChecker;
 import org.elitost.maven.plugins.checkers.CustomChecker;
 import org.elitost.maven.plugins.checkers.InitializableChecker;
-import org.elitost.maven.plugins.renderers.HtmlReportRenderer;
-import org.elitost.maven.plugins.renderers.MarkdownReportRenderer;
-import org.elitost.maven.plugins.renderers.ReportRenderer;
-import org.elitost.maven.plugins.renderers.TextReportRenderer;
+import org.elitost.maven.plugins.renderers.*;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.ServiceLoader;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
  * Plugin Maven de vérification modulaire destiné à analyser la structure d’un projet multi-modules.
- * <p>
- * Ce plugin exécute dynamiquement une série de {@link org.elitost.maven.plugins.checkers.CustomChecker},
- * chargés via SPI, afin de détecter des problèmes courants dans les fichiers {@code pom.xml},
- * les dépendances, les conventions de nommage ou la présence de balises inutiles ou obsolètes.
- * </p>
- *
- * <h2>Fonctionnalités</h2>
- * <ul>
- *   <li>Découverte dynamique des checkers via SPI</li>
- *   <li>Sélection des checkers via le paramètre {@code -DcheckersToRun=...}</li>
- *   <li>Support multi-format de rendu (HTML, Markdown, Texte)</li>
- *   <li>Analyse récursive de tous les modules déclarés dans le projet parent</li>
- * </ul>
- *
- * @goal check
- * @phase none
+ * Ce plugin exécute dynamiquement une série de checkers chargés via SPI, afin de détecter des problèmes courants dans les fichiers pom.xml, les dépendances, etc.
+ * Fonctionnalités :
+ * - Découverte dynamique des checkers via SPI
+ * - Sélection des checkers via -DcheckersToRun=...
+ * - Support multi-format de rendu (HTML, Markdown, Texte)
+ * - Analyse récursive de tous les modules déclarés dans le projet parent
  */
 @Mojo(name = "check", defaultPhase = LifecyclePhase.NONE)
 @Execute(goal = "check")
@@ -87,49 +71,25 @@ public class ModuleCheckerMojo extends AbstractMojo {
     public void execute() throws MojoExecutionException {
         this.log = getLog();
 
+        // Si ce n'est pas un pom parent, on arrête le plugin
         if (!isParentPom()) {
             log.info("🔍 Ce n'est pas le pom parent, le plugin ne s'exécute pas ici.");
             return;
         }
 
-        enrichPropertiesFromSystem();
-        initCheckers();
-        logAvailableCheckers();
+        enrichPropertiesFromSystem();  // Enrichit les propriétés à vérifier depuis la ligne de commande
+        initCheckers();  // Charge et initialise-les checkers dynamiquement via SPI
+        logAvailableCheckers();  // Affiche les checkers disponibles
 
         runAll = checkersToRun == null || checkersToRun.isEmpty();
 
+        // Rendu et génération du rapport
         ReportRenderer renderer = resolveRenderer();
-        StringBuilder content = new StringBuilder();
+        StringBuilder content = generateReportContent(project, renderer);
+        generateModuleReports(renderer, content);
 
-        content.append(generateReportContent(project, renderer));
-        List<MavenProject> modules = project.getCollectedProjects();
-        if (modules != null) {
-            for (MavenProject module : modules) {
-                content.append(generateReportContent(module, renderer));
-            }
-        }
-
+        // Écriture du rapport sur le disque
         writeReport(content.toString());
-    }
-
-    /**
-     * Charge dynamiquement les checkers via SPI et les initialise.
-     */
-    private void initCheckers() {
-        ServiceLoader<CustomChecker> serviceLoader = ServiceLoader.load(CustomChecker.class);
-        for (CustomChecker checker : serviceLoader) {
-            try {
-                if (checker instanceof BasicInitializableChecker) {
-                    ((BasicInitializableChecker) checker).init(log, resolveRenderer());
-                }
-                if (checker instanceof InitializableChecker) {
-                    ((InitializableChecker) checker).init(log, repoSystem, repoSession, remoteRepositories, resolveRenderer());
-                }
-                checkers.add(checker);
-            } catch (Exception e) {
-                log.error("❌ Erreur d'initialisation du checker : " + checker.getClass().getName(), e);
-            }
-        }
     }
 
     /**
@@ -143,7 +103,34 @@ public class ModuleCheckerMojo extends AbstractMojo {
         if (sysProp != null && !sysProp.trim().isEmpty()) {
             propertiesToCheck.addAll(Arrays.asList(sysProp.split(",")));
         } else {
-            getLog().warn("⚠️ Aucune propriété à vérifier n'a été fournie via -DpropertiesToCheck.");
+            log.warn("⚠️ Aucune propriété à vérifier n'a été fournie via -DpropertiesToCheck.");
+        }
+    }
+
+    /**
+     * Charge dynamiquement les checkers via SPI et les initialise.
+     */
+    private void initCheckers() {
+        ServiceLoader<CustomChecker> serviceLoader = ServiceLoader.load(CustomChecker.class);
+        for (CustomChecker checker : serviceLoader) {
+            try {
+                initializeChecker(checker);
+                checkers.add(checker);
+            } catch (Exception e) {
+                log.error("❌ Erreur d'initialisation du checker : " + checker.getClass().getName(), e);
+            }
+        }
+    }
+
+    /**
+     * Initialise un checker en fonction de ses capacités.
+     */
+    private void initializeChecker(CustomChecker checker) {
+        if (checker instanceof BasicInitializableChecker) {
+            ((BasicInitializableChecker) checker).init(log, resolveRenderer());
+        }
+        if (checker instanceof InitializableChecker) {
+            ((InitializableChecker) checker).init(log, repoSystem, repoSession, remoteRepositories, resolveRenderer());
         }
     }
 
@@ -179,7 +166,7 @@ public class ModuleCheckerMojo extends AbstractMojo {
      * @param renderer le moteur de rendu utilisé
      * @return contenu du rapport
      */
-    private String generateReportContent(MavenProject module, ReportRenderer renderer) {
+    private StringBuilder generateReportContent(MavenProject module, ReportRenderer renderer) {
         CheckerContext context = new CheckerContext(module, project, propertiesToCheck);
         StringBuilder content = new StringBuilder();
         content.append(renderer.renderHeader2("Module : " + module.getArtifactId()));
@@ -191,7 +178,21 @@ public class ModuleCheckerMojo extends AbstractMojo {
             }
         }
 
-        return content.toString();
+        return content;
+    }
+
+    /**
+     * Génère le rapport de tous les modules.
+     * @param renderer le moteur de rendu utilisé
+     * @param content le contenu du rapport
+     */
+    private void generateModuleReports(ReportRenderer renderer, StringBuilder content) {
+        List<MavenProject> modules = project.getCollectedProjects();
+        if (modules != null) {
+            for (MavenProject module : modules) {
+                content.append(generateReportContent(module, renderer));
+            }
+        }
     }
 
     /**
@@ -201,9 +202,9 @@ public class ModuleCheckerMojo extends AbstractMojo {
         boolean shouldRun = runAll || (checkersToRun != null && checkersToRun.contains(checker.getId()));
         if (!shouldRun) return "";
 
+        // Sauter les checkers non applicables
         List<String> topLevelOnlyCheckers = Arrays.asList("expectedModules", "propertyPresence");
         boolean isTopLevelOnly = topLevelOnlyCheckers.contains(checker.getId()) && !isTopLevelProject(context.getCurrentModule());
-
         boolean skipIfNotApi = "interfaceConformity".equals(checker.getId())
                 && !context.getCurrentModule().getArtifactId().endsWith("-api");
 
@@ -285,7 +286,7 @@ public class ModuleCheckerMojo extends AbstractMojo {
      * Résout dynamiquement le moteur de rendu à utiliser.
      */
     ReportRenderer resolveRenderer() {
-        String firstFormat = format != null && !format.isEmpty() ? format.get(0) : "markdown";
+        String firstFormat = format != null && !format.isEmpty() ? format.get(0).toLowerCase() : "markdown";
         String f = firstFormat.toLowerCase();
 
         switch (f) {

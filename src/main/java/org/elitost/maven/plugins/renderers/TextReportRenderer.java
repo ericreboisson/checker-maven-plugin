@@ -74,7 +74,7 @@ public class TextReportRenderer implements ReportRenderer {
 
     @Override
     public String openIndentedSection() {
-        return ""; // Optionnellement tu pourrais préfixer chaque ligne avec 2 espaces
+        return ""; // Optionnellement, tu pourrais préfixer chaque ligne avec 2 espaces
     }
 
     @Override

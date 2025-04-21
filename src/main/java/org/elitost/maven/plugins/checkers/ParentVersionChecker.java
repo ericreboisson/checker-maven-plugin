@@ -1,12 +1,9 @@
 package org.elitost.maven.plugins.checkers;
 
-import org.elitost.maven.plugins.CheckerContext;
-import org.elitost.maven.plugins.renderers.ReportRenderer;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.Parent;
 import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
 import org.apache.maven.plugin.logging.Log;
-import org.apache.maven.project.MavenProject;
 import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.artifact.DefaultArtifact;
@@ -14,6 +11,8 @@ import org.eclipse.aether.repository.RemoteRepository;
 import org.eclipse.aether.resolution.VersionRangeRequest;
 import org.eclipse.aether.resolution.VersionRangeResult;
 import org.eclipse.aether.version.Version;
+import org.elitost.maven.plugins.CheckerContext;
+import org.elitost.maven.plugins.renderers.ReportRenderer;
 
 import java.io.File;
 import java.io.FileReader;

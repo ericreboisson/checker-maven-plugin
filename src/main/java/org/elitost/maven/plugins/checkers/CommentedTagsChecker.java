@@ -1,12 +1,11 @@
 package org.elitost.maven.plugins.checkers;
 
+import org.apache.maven.plugin.logging.Log;
 import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.repository.RemoteRepository;
 import org.elitost.maven.plugins.CheckerContext;
 import org.elitost.maven.plugins.renderers.ReportRenderer;
-import org.apache.maven.plugin.logging.Log;
-import org.apache.maven.project.MavenProject;
 
 import java.io.File;
 import java.io.IOException;

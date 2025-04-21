@@ -15,8 +15,6 @@ import java.util.List;
  */
 public class HardcodedVersionChecker implements CustomChecker, InitializableChecker {
 
-    private static final String ANCHOR_ID = "hardcoded-versions";
-
     private Log log;
     private ReportRenderer renderer;
 

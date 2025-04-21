@@ -11,7 +11,7 @@ import java.util.*;
 
 /**
  * Analyseur de propriétés redondantes dans un fichier pom.xml :
- * Détecte les propriétés définies dans un module mais jamais utilisées dans aucun pom du projet.
+ * Détecte les propriétés définies dans un module, mais jamais utilisées dans aucun pom du projet.
  */
 public class RedundantPropertiesChecker implements CustomChecker, BasicInitializableChecker {
 
@@ -35,7 +35,7 @@ public class RedundantPropertiesChecker implements CustomChecker, BasicInitializ
     }
 
     /**
-     * Génère un rapport listant les propriétés définies dans ce module mais non utilisées dans le projet.
+     * Génère un rapport listant les propriétés définies dans ce module, mais non utilisées dans le projet.
      *
      * @param checkerContext Le projet Maven (racine ou module) à analyser.
      * @return Rapport formaté (Markdown, HTML...) ou chaîne vide si tout est utilisé.

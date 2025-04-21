@@ -1,9 +1,8 @@
 package org.elitost.maven.plugins.checkers;
 
+import org.apache.maven.plugin.logging.Log;
 import org.elitost.maven.plugins.CheckerContext;
 import org.elitost.maven.plugins.renderers.ReportRenderer;
-import org.apache.maven.plugin.logging.Log;
-import org.apache.maven.project.MavenProject;
 
 import java.io.File;
 import java.net.HttpURLConnection;

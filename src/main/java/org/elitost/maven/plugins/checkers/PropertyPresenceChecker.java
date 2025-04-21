@@ -1,9 +1,8 @@
 package org.elitost.maven.plugins.checkers;
 
+import org.apache.maven.plugin.logging.Log;
 import org.elitost.maven.plugins.CheckerContext;
 import org.elitost.maven.plugins.renderers.ReportRenderer;
-import org.apache.maven.plugin.logging.Log;
-import org.apache.maven.project.MavenProject;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -50,9 +49,10 @@ public class PropertyPresenceChecker implements CustomChecker, InitializableChec
         report.append(renderer.renderHeader3("🔧 Propriétés manquantes dans `" + artifactId + "`"));
         report.append(renderer.openIndentedSection());
 
+        List<String[]> missing;
         try {
             Properties props = checkerContext.getCurrentModule().getProperties();
-            List<String[]> missing = new ArrayList<>();
+            missing = new ArrayList<>();
 
             for (String key : checkerContext.getPropertiesToCheck()) {
                 if (!props.containsKey(key)) {
@@ -61,9 +61,8 @@ public class PropertyPresenceChecker implements CustomChecker, InitializableChec
                 }
             }
 
-            if (missing.isEmpty()) {
-                report.append(renderer.renderParagraph("✅ Toutes les propriétés attendues sont définies."));
-            } else {
+            // Si des propriétés sont manquantes, on les liste
+            if (!missing.isEmpty()) {
                 report.append(renderer.renderTable(new String[]{"Clé", "Statut"}, missing.toArray(new String[0][0])));
             }
 
@@ -73,7 +72,9 @@ public class PropertyPresenceChecker implements CustomChecker, InitializableChec
         }
 
         report.append(renderer.closeIndentedSection());
-        return report.toString();
+
+        // Retourne une chaîne vide si tout va bien (aucune propriété manquante)
+        return missing.isEmpty() ? "" : report.toString();
     }
 
     /**

@@ -11,7 +11,7 @@ public class HelpMojo extends AbstractMojo {
     @Parameter(defaultValue = "false", property = "detail")
     private boolean detail;
 
-    public void execute() throws MojoExecutionException {
+    public void execute() {
         getLog().info("Checker Maven Plugin - Aide");
         getLog().info("-------------------------------------");
         getLog().info("Ce plugin permet d'exécuter plusieurs vérifications sur des projets Maven multi-modules.");

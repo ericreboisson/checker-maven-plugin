@@ -34,9 +34,7 @@ public class MarkdownReportRenderer implements ReportRenderer {
 
         // Separator
         sb.append("|");
-        for (int i = 0; i < headers.length; i++) {
-            sb.append(" --- |");
-        }
+        sb.append(" --- |".repeat(headers.length));
         sb.append("\n");
 
         // Rows

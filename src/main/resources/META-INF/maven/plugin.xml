@@ -1,0 +1,8 @@
+<mojos>
+    <mojo>
+        <goal>check</goal>
+        <implementation>org.elitost.maven.plugins.ModuleCheckerMojo</implementation>
+        <phase>none</phase>
+        <description>Check the module structure and dependencies</description>
+    </mojo>
+</mojos>
