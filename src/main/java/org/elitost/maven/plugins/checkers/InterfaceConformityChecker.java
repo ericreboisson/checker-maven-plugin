@@ -164,7 +164,7 @@ public class InterfaceConformityChecker implements CustomChecker, BasicInitializ
                         .forEach(file -> {
                             try {
                                 String content = Files.readString(file);
-                                extractLogClassNameCalls(content).forEach(found::add);
+                                found.addAll(extractLogClassNameCalls(content));
                             } catch (IOException e) {
                                 log.warn("⚠️ Lecture échouée pour le fichier : " + file);
                             }

@@ -54,28 +54,28 @@ Ou directement via une configuration dans le plugin management.
 
 ## ⚙️ Paramètres
 
-| Paramètre              | Description                                                                   | Exemple                                           |
-|------------------------|-------------------------------------------------------------------------------|---------------------------------------------------|
-| `-Dformat`             | Format du rapport généré : `html`, `markdown`, `text`                         | `-Dformat=html`                                   |
-| `-DcheckersToRun`      | Liste des identifiants des checkers à exécuter (séparés par `,`)              | `-DcheckersToRun=expectedModules,hardcodedVersion` |
-| `-DpropertiesToCheck`  | Propriétés spécifiques à vérifier dans les `pom.xml`                          | `-DpropertiesToCheck=java.version,encoding`       |
+| Paramètre             | Description                                                      | Exemple                                            |
+|-----------------------|------------------------------------------------------------------|----------------------------------------------------|
+| `-Dformat`            | Format du rapport généré : `html`, `markdown`, `text`            | `-Dformat=html`                                    |
+| `-DcheckersToRun`     | Liste des identifiants des checkers à exécuter (séparés par `,`) | `-DcheckersToRun=expectedModules,hardcodedVersion` |
+| `-DpropertiesToCheck` | Propriétés spécifiques à vérifier dans les `pom.xml`             | `-DpropertiesToCheck=java.version,encoding`        |
 
 ---
 
 ## ✅ Liste des checkers intégrés
 
-| ID                         | Description                                                               |
-|----------------------------|---------------------------------------------------------------------------|
-| `expectedModules`          | Vérifie la présence et la déclaration des modules conventionnels (`-api`, `-impl`) |
-| `propertyPresence`         | Vérifie que certaines propriétés clés sont bien définies (`java.version`, etc.) |
-| `hardcodedVersion`         | Détecte les dépendances avec versions codées en dur                        |
-| `outdatedDependencies`     | Vérifie si certaines dépendances sont obsolètes                            |
-| `commentedTags`            | Signale les balises XML Maven importantes commentées (`<dependencies>`, `<build>`, ...) |
-| `redundantProperties`      | Liste les propriétés déclarées mais jamais utilisées dans aucun `pom.xml` |
-| `unusedDependencies`       | Analyse le code Java pour détecter les dépendances non utilisées          |
-| `url`                      | Vérifie la balise `<url>` du `pom.xml`, sa présence, sa sécurité (HTTPS) et sa disponibilité |
-| `redefinedDependencyVersion` | Signale les dépendances dont la version redéfinit inutilement celle du `dependencyManagement` |
-| `interfaceConformity`      | Vérifie que toutes les interfaces publiques d’un module `-api` sont testées via `ClassInspector.logClassName(...)` |
+| ID                           | Description                                                                                                        |
+|------------------------------|--------------------------------------------------------------------------------------------------------------------|
+| `expectedModules`            | Vérifie la présence et la déclaration des modules conventionnels (`-api`, `-impl`)                                 |
+| `propertyPresence`           | Vérifie que certaines propriétés clés sont bien définies (`java.version`, etc.)                                    |
+| `hardcodedVersion`           | Détecte les dépendances avec versions codées en dur                                                                |
+| `outdatedDependencies`       | Vérifie si certaines dépendances sont obsolètes                                                                    |
+| `commentedTags`              | Signale les balises XML Maven importantes commentées (`<dependencies>`, `<build>`, ...)                            |
+| `redundantProperties`        | Liste les propriétés déclarées mais jamais utilisées dans aucun `pom.xml`                                          |
+| `unusedDependencies`         | Analyse le code Java pour détecter les dépendances non utilisées                                                   |
+| `url`                        | Vérifie la balise `<url>` du `pom.xml`, sa présence, sa sécurité (HTTPS) et sa disponibilité                       |
+| `redefinedDependencyVersion` | Signale les dépendances dont la version redéfinit inutilement celle du `dependencyManagement`                      |
+| `interfaceConformity`        | Vérifie que toutes les interfaces publiques d’un module `-api` sont testées via `ClassInspector.logClassName(...)` |
 
 ---
 

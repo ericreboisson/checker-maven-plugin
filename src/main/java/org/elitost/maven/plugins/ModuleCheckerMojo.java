@@ -92,7 +92,7 @@ public class ModuleCheckerMojo extends AbstractMojo {
         for (String fmt : formatsToGenerate) {
             ReportRenderer renderer = ReportRendererFactory.createRenderer(fmt);
 
-            // Réinitialise les checkers avec le bon renderer pour ce format
+            // Réinitialise-les checkers avec le bon renderer pour ce format
             reinitializeCheckersForRenderer(renderer);
 
             StringBuilder content = generateFullReport(renderer);
