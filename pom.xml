@@ -21,9 +21,9 @@
   </developers>
 
   <scm>
-    <url>https://github.com/ericreboisson/maven-checker-plugin</url>
-    <connection>scm:git:git@github.com:ericreboisson/maven-checker-plugin.git</connection>
-    <developerConnection>scm:git:ssh://github.com/ericreboisson/maven-checker-plugin.git</developerConnection>
+    <url>https://github.com/ericreboisson/checker-maven-plugin</url>
+    <connection>scm:git:git@github.com:ericreboisson/checker-maven-plugin.git</connection>
+    <developerConnection>scm:git:ssh://github.com/ericreboisson/checker-maven-plugin.git</developerConnection>
     <tag>HEAD</tag>
   </scm>
 
