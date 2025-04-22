@@ -11,11 +11,16 @@ import org.eclipse.aether.repository.RemoteRepository;
 import org.elitost.maven.plugins.checkers.BasicInitializableChecker;
 import org.elitost.maven.plugins.checkers.CustomChecker;
 import org.elitost.maven.plugins.checkers.InitializableChecker;
+import org.elitost.maven.plugins.factory.ReportRendererFactory;
 import org.elitost.maven.plugins.renderers.*;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
 /**
@@ -71,25 +76,44 @@ public class ModuleCheckerMojo extends AbstractMojo {
     public void execute() throws MojoExecutionException {
         this.log = getLog();
 
-        // Si ce n'est pas un pom parent, on arrête le plugin
         if (!isParentPom()) {
             log.info("🔍 Ce n'est pas le pom parent, le plugin ne s'exécute pas ici.");
             return;
         }
 
-        enrichPropertiesFromSystem();  // Enrichit les propriétés à vérifier depuis la ligne de commande
-        initCheckers();  // Charge et initialise-les checkers dynamiquement via SPI
-        logAvailableCheckers();  // Affiche les checkers disponibles
+        enrichPropertiesFromSystem();
+        initCheckers();
+        logAvailableCheckers();
 
         runAll = checkersToRun == null || checkersToRun.isEmpty();
 
-        // Rendu et génération du rapport
-        ReportRenderer renderer = resolveRenderer();
+        List<String> formatsToGenerate = (format != null && !format.isEmpty()) ? format : List.of("markdown");
+
+        for (String fmt : formatsToGenerate) {
+            ReportRenderer renderer = ReportRendererFactory.createRenderer(fmt);
+
+            // Réinitialise les checkers avec le bon renderer pour ce format
+            reinitializeCheckersForRenderer(renderer);
+
+            StringBuilder content = generateFullReport(renderer);
+            writeReport(fmt, content.toString());
+        }
+    }
+
+    private void reinitializeCheckersForRenderer(ReportRenderer renderer) {
+        for (CustomChecker checker : checkers) {
+            if (checker instanceof BasicInitializableChecker) {
+                ((BasicInitializableChecker) checker).init(log, renderer);
+            }
+            if (checker instanceof InitializableChecker) {
+                ((InitializableChecker) checker).init(log, repoSystem, repoSession, remoteRepositories, renderer);
+            }
+        }
+    }
+    private StringBuilder generateFullReport(ReportRenderer renderer) {
         StringBuilder content = generateReportContent(project, renderer);
         generateModuleReports(renderer, content);
-
-        // Écriture du rapport sur le disque
-        writeReport(content.toString());
+        return content;
     }
 
     /**
@@ -114,23 +138,10 @@ public class ModuleCheckerMojo extends AbstractMojo {
         ServiceLoader<CustomChecker> serviceLoader = ServiceLoader.load(CustomChecker.class);
         for (CustomChecker checker : serviceLoader) {
             try {
-                initializeChecker(checker);
                 checkers.add(checker);
             } catch (Exception e) {
                 log.error("❌ Erreur d'initialisation du checker : " + checker.getClass().getName(), e);
             }
-        }
-    }
-
-    /**
-     * Initialise un checker en fonction de ses capacités.
-     */
-    private void initializeChecker(CustomChecker checker) {
-        if (checker instanceof BasicInitializableChecker) {
-            ((BasicInitializableChecker) checker).init(log, resolveRenderer());
-        }
-        if (checker instanceof InitializableChecker) {
-            ((InitializableChecker) checker).init(log, repoSystem, repoSession, remoteRepositories, resolveRenderer());
         }
     }
 
@@ -171,10 +182,23 @@ public class ModuleCheckerMojo extends AbstractMojo {
         StringBuilder content = new StringBuilder();
         content.append(renderer.renderHeader2("Module : " + module.getArtifactId()));
 
+        ExecutorService executor = Executors.newWorkStealingPool();
+
+        List<Future<String>> futures = new ArrayList<>();
         for (CustomChecker checker : checkers) {
-            String report = generateCheckerReport(checker, context);
-            if (!report.isEmpty()) {
-                content.append(report).append("\n");
+            futures.add(executor.submit(() -> generateCheckerReport(checker, context)));
+        }
+
+        executor.shutdown();
+
+        for (Future<String> future : futures) {
+            try {
+                String report = future.get();
+                if (!report.isEmpty()) {
+                    content.append(report).append("\n");
+                }
+            } catch (Exception e) {
+                log.error("❌ Erreur lors de l'exécution d'un checker", e);
             }
         }
 
@@ -188,11 +212,24 @@ public class ModuleCheckerMojo extends AbstractMojo {
      */
     private void generateModuleReports(ReportRenderer renderer, StringBuilder content) {
         List<MavenProject> modules = project.getCollectedProjects();
-        if (modules != null) {
-            for (MavenProject module : modules) {
-                content.append(generateReportContent(module, renderer));
+
+        ExecutorService executor = Executors.newWorkStealingPool();
+
+        List<Future<StringBuilder>> futures = new ArrayList<>();
+        for (MavenProject module : modules) {
+            futures.add(executor.submit(() -> generateReportContent(module, renderer)));
+        }
+
+        executor.shutdown();
+
+        for (Future<StringBuilder> future : futures) {
+            try {
+                content.append(future.get());
+            } catch (Exception e) {
+                log.error("❌ Erreur lors de la génération du rapport de module", e);
             }
         }
+
     }
 
     /**
@@ -220,11 +257,15 @@ public class ModuleCheckerMojo extends AbstractMojo {
      * @param content contenu HTML/Markdown/Text du rapport
      * @throws MojoExecutionException en cas d'erreur de fichier
      */
-    private void writeReport(String content) throws MojoExecutionException {
-        String ext = format != null && !format.isEmpty() ? format.get(0).toLowerCase() : "md";
+    private void writeReport(String format, String content) throws MojoExecutionException {
+        String ext = format.toLowerCase();
         if (ext.equals("markdown")) ext = "md";
 
-        File outputFile = new File(project.getBasedir(), "module-check-report." + ext);
+        File outputDir = new File(project.getBasedir(), "target/checker-reports");
+        if (!outputDir.exists()) outputDir.mkdirs();
+
+        String timestamp = new SimpleDateFormat("yyyyMMdd-HHmmss").format(new Date());
+        File outputFile = new File(outputDir, "module-check-report-" + timestamp + "." + ext);
 
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputFile))) {
             switch (ext) {
@@ -244,13 +285,17 @@ public class ModuleCheckerMojo extends AbstractMojo {
                     writer.write(content);
                     writer.write("</body></html>");
                     break;
+                default:
+                    log.warn("⚠️ Format inconnu '" + format + "', rapport ignoré.");
+                    return;
             }
-        } catch (IOException e) {
-            throw new MojoExecutionException("❌ Erreur lors de la création du fichier de rapport", e);
-        }
 
-        log.info("📄 Rapport généré : " + outputFile.getAbsolutePath());
-        log.info("👉 file://" + outputFile.getAbsolutePath());
+            log.info("📄 Rapport généré : " + outputFile.getAbsolutePath());
+            log.info("👉 file://" + outputFile.getAbsolutePath());
+
+        } catch (IOException e) {
+            throw new MojoExecutionException("❌ Erreur lors de la création du fichier de rapport " + ext, e);
+        }
     }
 
     /**
@@ -282,24 +327,4 @@ public class ModuleCheckerMojo extends AbstractMojo {
         return module.getArtifactId().equals(project.getArtifactId());
     }
 
-    /**
-     * Résout dynamiquement le moteur de rendu à utiliser.
-     */
-    ReportRenderer resolveRenderer() {
-        String firstFormat = format != null && !format.isEmpty() ? format.get(0).toLowerCase() : "markdown";
-        String f = firstFormat.toLowerCase();
-
-        switch (f) {
-            case "html":
-                return new HtmlReportRenderer();
-            case "text":
-                return new TextReportRenderer();
-            case "markdown":
-            case "md":
-                return new MarkdownReportRenderer();
-        }
-
-        log.warn("Format inconnu '" + firstFormat + "', utilisation de Markdown par défaut.");
-        return new MarkdownReportRenderer();
-    }
 }
