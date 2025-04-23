@@ -69,8 +69,6 @@ public class CommentedTagsChecker implements CustomChecker, InitializableChecker
     private static final Pattern PROPERTY_PATTERN = Pattern.compile("<\\s*([\\w\\-.]+)\\s*>(.*?)<\\s*/\\s*\\1\\s*>", Pattern.DOTALL);
 
     private final Set<String> tagWhitelist;
-    private final int maxCommentLength = 500;
-    private final boolean truncateComments = true;
     private Log log;
     private ReportRenderer renderer;
 
@@ -177,7 +175,7 @@ public class CommentedTagsChecker implements CustomChecker, InitializableChecker
             List<String> commentedProperties = extractCommentedProperties(comment);
 
             if (isSignificantBlock(significantTags, commentedProperties)) {
-                results.add(new CommentedBlock(comment, significantTags, commentedProperties));
+                results.add(new CommentedBlock(comment));
             }
         }
         return results;
@@ -277,7 +275,8 @@ public class CommentedTagsChecker implements CustomChecker, InitializableChecker
      * Si le commentaire est trop long, il est tronqué pour améliorer la lisibilité
      */
     private String formatCommentAsHtml(String comment) {
-        String formattedComment = truncateComments && comment.length() > maxCommentLength
+        int maxCommentLength = 500;
+        String formattedComment = comment.length() > maxCommentLength
                 ? comment.substring(0, maxCommentLength) + "... [tronqué]"
                 : comment;
 
@@ -292,13 +291,9 @@ public class CommentedTagsChecker implements CustomChecker, InitializableChecker
      */
     private static class CommentedBlock {
         private final String content;
-        private final List<String> tags;
-        private final List<String> properties;
 
-        public CommentedBlock(String content, List<String> tags, List<String> properties) {
+        public CommentedBlock(String content) {
             this.content = content;
-            this.tags = tags;
-            this.properties = properties;
         }
     }
 }

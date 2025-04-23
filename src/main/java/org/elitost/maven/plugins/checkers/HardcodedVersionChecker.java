@@ -4,6 +4,9 @@ import org.apache.maven.model.Dependency;
 import org.apache.maven.model.Plugin;
 import org.apache.maven.plugin.logging.Log;
 import org.apache.maven.project.MavenProject;
+import org.eclipse.aether.RepositorySystem;
+import org.eclipse.aether.RepositorySystemSession;
+import org.eclipse.aether.repository.RemoteRepository;
 import org.elitost.maven.plugins.CheckerContext;
 import org.elitost.maven.plugins.renderers.ReportRenderer;
 
@@ -31,9 +34,9 @@ public class HardcodedVersionChecker implements CustomChecker, InitializableChec
 
     @Override
     public void init(Log log,
-                     org.eclipse.aether.RepositorySystem repoSystem,
-                     org.eclipse.aether.RepositorySystemSession session,
-                     List<org.eclipse.aether.repository.RemoteRepository> remoteRepositories,
+                     RepositorySystem repoSystem,
+                     RepositorySystemSession session,
+                     List<RemoteRepository> remoteRepositories,
                      ReportRenderer renderer) {
         this.log = log;
         this.renderer = renderer;
