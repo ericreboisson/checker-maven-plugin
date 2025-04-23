@@ -38,6 +38,14 @@ public class ExpectedModulesChecker implements CustomChecker, BasicInitializable
             "-local"
     );
 
+    // Constantes pour les messages
+    private static final String MSG_MODULES_MISSING = "Modules attendus manquants (non déclarés et absents du disque) :";
+    private static final String MSG_MODULES_NOT_DECLARED = "Modules existants mais non déclarés dans le pom.xml :";
+    private static final String MSG_MODULES_DECLARED_MISSING = "Modules déclarés mais absents du disque :";
+    private static final String MSG_MODULES_NO_POM = "Modules existants mais sans fichier pom.xml :";
+    private static final String MSG_SUCCESS = "Tous les modules attendus sont présents et correctement déclarés.";
+    private static final String MSG_ERROR = "Une erreur est survenue lors de la vérification des modules : `%s`";
+
     private Log log;
     private ReportRenderer renderer;
 
@@ -68,101 +76,121 @@ public class ExpectedModulesChecker implements CustomChecker, BasicInitializable
         report.append(renderer.openIndentedSection());
 
         try {
-            // Récupère les propriétés de configuration du projet
             Properties properties = project.getProperties();
+            log.debug("[ModuleChecker] Chargement des propriétés Maven pour le projet : " + artifactId);
 
-            // Détermine les suffixes de modules attendus
             List<String> moduleSuffixes = getConfiguredSuffixes(properties);
+            log.debug("[ModuleChecker] Suffixes configurés : " + moduleSuffixes);
 
-            // Récupère les modules à exclure de la vérification
-            Set<String> excludedModules = getConfiguredExcludes(properties, artifactId);
+            Set<String> excludedModules = getConfiguredModules(properties, PROP_EXCLUDES, artifactId);
+            log.debug("[ModuleChecker] Modules exclus : " + excludedModules);
 
-            // Récupère les modules optionnels
-            Set<String> optionalModules = getConfiguredOptionalModules(properties, artifactId);
+            Set<String> optionalModules = getConfiguredModules(properties, PROP_OPTIONAL, artifactId);
+            log.debug("[ModuleChecker] Modules optionnels : " + optionalModules);
 
-            // Génère la liste des modules attendus en fonction des suffixes
             List<String> expectedModules = getExpectedModules(artifactId, moduleSuffixes, excludedModules);
+            log.debug("[ModuleChecker] Modules attendus : " + expectedModules);
 
-            // Identifie les différents types de problèmes de modules
             ModuleAnalysisResult analysisResult = analyzeModules(project, expectedModules, optionalModules);
 
             if (analysisResult.hasIssues()) {
-                // Génère un rapport détaillé des problèmes
-                generateIssuesReport(report, analysisResult);
+                appendDetailedIssuesReport(report, analysisResult);
             } else {
-                String successMessage = Symbols.OK + "Tous les modules attendus sont présents et correctement déclarés.";
-                report.append(renderer.renderParagraph(successMessage));
-                log.info("[ModuleChecker] " + successMessage);
+                appendSuccessMessage(report);
             }
 
-            // Affiche les modules déclarés, mais non attendus par convention
             detectExtraModules(report, project, expectedModules, excludedModules);
 
         } catch (Exception e) {
-            String errorMessage = "Une erreur est survenue lors de la vérification des modules : `" + e.getMessage() + "`";
-            report.append(renderer.renderError(errorMessage));
-            log.error("[ModuleChecker] " + errorMessage, e);
+            log.error("[ModuleChecker] Une exception s'est produite lors de la génération du rapport pour le projet : " + artifactId, e);
+            appendErrorMessage(report, e);
         }
 
         report.append(renderer.closeIndentedSection());
         return report.toString();
     }
 
+    private void appendDetailedIssuesReport(StringBuilder report, ModuleAnalysisResult analysisResult) {
+        appendIssuesReport(report, analysisResult);
+    }
+
+    private void appendIssuesReport(StringBuilder report, ModuleAnalysisResult analysisResult) {
+        appendIssueSectionIfNotEmpty(report, MSG_MODULES_MISSING, analysisResult.modulesCompletelyMissing,
+                "💡 Ces modules sont attendus par convention. Tu dois les créer et les déclarer dans le pom.xml parent.");
+        appendIssueSectionIfNotEmpty(report, MSG_MODULES_NOT_DECLARED, analysisResult.modulesExistButNotDeclared,
+                "💡 Ces modules existent sur le disque mais ne sont pas déclarés dans la section `<modules>` du pom.xml parent.");
+        appendIssueSectionIfNotEmpty(report, MSG_MODULES_DECLARED_MISSING, analysisResult.modulesDeclaredButMissing,
+                "💡 Ces modules sont déclarés dans le pom.xml mais n'existent pas sur le disque.");
+        appendIssueSectionIfNotEmpty(report, MSG_MODULES_NO_POM, analysisResult.modulesExistButNoPom,
+                "💡 Ces modules existent sur le disque mais ne contiennent pas de fichier pom.xml.");
+    }
+
+    private void appendIssueSectionIfNotEmpty(StringBuilder report, String header, List<String> modules, String suggestion) {
+        if (!modules.isEmpty()) {
+            appendIssueSection(report, header, modules, suggestion);
+        }
+    }
+
+    private void appendSuccessMessage(StringBuilder report) {
+        String successMessage = Symbols.OK + MSG_SUCCESS;
+        report.append(renderer.renderParagraph(successMessage));
+        log.info("[ModuleChecker] " + successMessage);
+    }
+
+    private void appendErrorMessage(StringBuilder report, Exception e) {
+        String errorMessage = String.format(MSG_ERROR, e.getMessage());
+        report.append(renderer.renderError(errorMessage));
+        log.error("[ModuleChecker] Détails de l'erreur : " + errorMessage, e);
+    }
+
     /**
      * Récupère les suffixes de modules configurés ou utilise les valeurs par défaut
      */
     private List<String> getConfiguredSuffixes(Properties properties) {
-        String suffixesProperty = properties.getProperty(PROP_SUFFIXES);
-        if (suffixesProperty != null && !suffixesProperty.trim().isEmpty()) {
-            return Arrays.stream(suffixesProperty.split(","))
-                    .map(String::trim)
-                    .filter(s -> !s.isEmpty())
-                    .collect(Collectors.toList());
+        try {
+            return Optional.ofNullable(properties.getProperty(PROP_SUFFIXES))
+                    .map(suffixesProperty -> Arrays.stream(suffixesProperty.split(","))
+                            .map(String::trim)
+                            .filter(s -> !s.isEmpty())
+                            .collect(Collectors.toList()))
+                    .orElse(DEFAULT_MODULE_SUFFIXES);
+        } catch (Exception e) {
+            log.error("[ModuleChecker] Erreur lors de la récupération des suffixes configurés", e);
+            throw e;
         }
-        return DEFAULT_MODULE_SUFFIXES;
     }
 
     /**
-     * Récupère les modules à exclure configurés
+     * Récupère les modules configurés à partir d'une propriété Maven donnée.
      */
-    private Set<String> getConfiguredExcludes(Properties properties, String baseArtifactId) {
-        String excludesProperty = properties.getProperty(PROP_EXCLUDES);
-        Set<String> excludes = new HashSet<>();
-        if (excludesProperty != null && !excludesProperty.trim().isEmpty()) {
-            Arrays.stream(excludesProperty.split(","))
-                    .map(String::trim)
-                    .filter(s -> !s.isEmpty())
-                    .map(suffix -> suffix.startsWith(baseArtifactId) ? suffix : baseArtifactId + suffix)
-                    .forEach(excludes::add);
+    private Set<String> getConfiguredModules(Properties properties, String propertyKey, String baseArtifactId) {
+        try {
+            return Optional.ofNullable(properties.getProperty(propertyKey))
+                    .map(propertyValue -> Arrays.stream(propertyValue.split(","))
+                            .map(String::trim)
+                            .filter(s -> !s.isEmpty())
+                            .map(suffix -> suffix.startsWith(baseArtifactId) ? suffix : baseArtifactId + suffix)
+                            .collect(Collectors.toSet()))
+                    .orElseGet(HashSet::new);
+        } catch (Exception e) {
+            log.error("[ModuleChecker] Erreur lors de la récupération des modules pour la propriété : " + propertyKey, e);
+            throw e;
         }
-        return excludes;
-    }
-
-
-    /**
-     * Récupère les modules optionnels configurés
-     */
-    private Set<String> getConfiguredOptionalModules(Properties properties, String baseArtifactId) {
-        String optionalProperty = properties.getProperty(PROP_OPTIONAL);
-        Set<String> optionalModules = new HashSet<>();
-        if (optionalProperty != null && !optionalProperty.trim().isEmpty()) {
-            Arrays.stream(optionalProperty.split(","))
-                    .map(String::trim)
-                    .filter(s -> !s.isEmpty())
-                    .map(suffix -> suffix.startsWith(baseArtifactId) ? suffix : baseArtifactId + suffix)
-                    .forEach(optionalModules::add);
-        }
-        return optionalModules;
     }
 
     /**
      * Génère la liste des modules attendus en fonction des suffixes et des exclusions
      */
     private List<String> getExpectedModules(String baseArtifactId, List<String> suffixes, Set<String> excludes) {
-        return suffixes.stream()
-                .map(suffix -> baseArtifactId + suffix)
-                .filter(moduleName -> !excludes.contains(moduleName))
-                .collect(Collectors.toList());
+        try {
+            return suffixes.stream()
+                    .map(suffix -> baseArtifactId + suffix)
+                    .filter(moduleName -> !excludes.contains(moduleName))
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.error("[ModuleChecker] Erreur lors de la génération des modules attendus", e);
+            throw e;
+        }
     }
 
     /**
@@ -195,40 +223,12 @@ public class ExpectedModulesChecker implements CustomChecker, BasicInitializable
     }
 
     /**
-     * Génère un rapport détaillé des problèmes détectés
+     * Ajoute une section de problème au rapport
      */
-    private void generateIssuesReport(StringBuilder report, ModuleAnalysisResult analysisResult) {
-        if (!analysisResult.modulesCompletelyMissing.isEmpty()) {
-            report.append(renderer.renderError("Modules attendus manquants (non déclarés et absents du disque) :"));
-            renderModuleList(report, analysisResult.modulesCompletelyMissing, "Module manquant");
-            report.append(renderer.renderParagraph(
-                    "💡 Ces modules sont attendus par convention. Tu dois les créer et les déclarer dans le pom.xml parent."
-            ));
-        }
-
-        if (!analysisResult.modulesExistButNotDeclared.isEmpty()) {
-            report.append(renderer.renderError("Modules existants mais non déclarés dans le pom.xml :"));
-            renderModuleList(report, analysisResult.modulesExistButNotDeclared, "Module non déclaré");
-            report.append(renderer.renderParagraph(
-                    "💡 Ces modules existent sur le disque mais ne sont pas déclarés dans la section `<modules>` du pom.xml parent."
-            ));
-        }
-
-        if (!analysisResult.modulesDeclaredButMissing.isEmpty()) {
-            report.append(renderer.renderError("Modules déclarés mais absents du disque :"));
-            renderModuleList(report, analysisResult.modulesDeclaredButMissing, "Module absent");
-            report.append(renderer.renderParagraph(
-                    "💡 Ces modules sont déclarés dans le pom.xml mais n'existent pas sur le disque."
-            ));
-        }
-
-        if (!analysisResult.modulesExistButNoPom.isEmpty()) {
-            report.append(renderer.renderError("Modules existants mais sans fichier pom.xml :"));
-            renderModuleList(report, analysisResult.modulesExistButNoPom, "Module sans pom");
-            report.append(renderer.renderParagraph(
-                    "💡 Ces modules existent sur le disque mais ne contiennent pas de fichier pom.xml."
-            ));
-        }
+    private void appendIssueSection(StringBuilder report, String header, List<String> modules, String suggestion) {
+        report.append(renderer.renderError(header));
+        renderModuleList(report, modules, header);
+        report.append(renderer.renderParagraph(suggestion));
     }
 
     /**
@@ -260,7 +260,6 @@ public class ExpectedModulesChecker implements CustomChecker, BasicInitializable
             report.append(renderer.renderHeader3("ℹ️ Modules supplémentaires"));
             report.append(renderer.renderParagraph(
                     "Ces modules sont déclarés mais ne suivent pas la convention de nommage standard. "
-                            + "Ce n'est pas une erreur, juste une information."
             ));
 
             String[][] rows = extraModules.stream()
@@ -288,3 +287,4 @@ public class ExpectedModulesChecker implements CustomChecker, BasicInitializable
         }
     }
 }
+
