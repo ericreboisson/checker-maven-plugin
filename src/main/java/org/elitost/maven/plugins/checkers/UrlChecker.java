@@ -9,9 +9,9 @@ import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.file.Files;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.Optional;
 
 /**
  * Vérifie la présence et la validité de la balise <url> dans le POM.
@@ -49,7 +49,7 @@ public class UrlChecker implements CustomChecker, BasicInitializableChecker {
 
         return checkResult
                 .filter(UrlCheckResult::hasIssue)
-                .map(result -> buildReport(artifactId, result))
+                .map(this::buildReport)
                 .orElse("");
     }
 
@@ -120,13 +120,11 @@ public class UrlChecker implements CustomChecker, BasicInitializableChecker {
         }
     }
 
-    private String buildReport(String artifactId, UrlCheckResult result) {
-        StringBuilder report = new StringBuilder();
-        report.append(renderer.renderHeader3(result.getTitle()));
-        report.append(renderer.openIndentedSection());
-        report.append(renderer.renderError(result.getMessage()));
-        report.append(renderer.closeIndentedSection());
-        return report.toString();
+    private String buildReport(UrlCheckResult result) {
+        return renderer.renderHeader3(result.getTitle()) +
+                renderer.openIndentedSection() +
+                renderer.renderError(result.getMessage()) +
+                renderer.closeIndentedSection();
     }
 
     private static class UrlCheckResult {

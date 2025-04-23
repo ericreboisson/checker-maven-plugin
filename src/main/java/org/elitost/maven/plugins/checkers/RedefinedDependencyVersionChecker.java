@@ -1,13 +1,14 @@
 package org.elitost.maven.plugins.checkers;
 
+import org.apache.maven.model.Dependency;
+import org.apache.maven.plugin.logging.Log;
+import org.apache.maven.project.MavenProject;
 import org.elitost.maven.plugins.CheckerContext;
 import org.elitost.maven.plugins.renderers.ReportRenderer;
-import org.apache.maven.plugin.logging.Log;
-import org.apache.maven.model.Dependency;
-import org.apache.maven.model.DependencyManagement;
-import org.apache.maven.project.MavenProject;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -140,7 +141,7 @@ public class RedefinedDependencyVersionChecker implements CustomChecker, BasicIn
 
         return value.substring(0, start) + propertyValue + value.substring(end + 1);
     }
-
+    
     private List<DependencyRedefinition> findVersionRedefinitions(
             Map<String, String> currentResolvedVersions,
             Map<String, String> parentResolvedVersions) {

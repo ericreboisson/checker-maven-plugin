@@ -21,18 +21,13 @@ public class PropertyPresenceChecker implements CustomChecker, InitializableChec
 
     private static final String CHECKER_ID = "propertyPresence";
     private static final String ERROR_PREFIX = "[PropertyChecker]";
-
+    private final PropertySuggester propertySuggester;
     private Log log;
     private ReportRenderer renderer;
-    private PropertySuggester propertySuggester;
 
+    // Nécessaire pour l'injection de dépendances
     public PropertyPresenceChecker() {
         this.propertySuggester = new DefaultPropertySuggester();
-    }
-
-    // Injection optionnelle pour les tests
-    PropertyPresenceChecker(PropertySuggester propertySuggester) {
-        this.propertySuggester = propertySuggester;
     }
 
     @Override
@@ -117,6 +112,11 @@ public class PropertyPresenceChecker implements CustomChecker, InitializableChec
         return renderer.renderError("❌ Une erreur est survenue : " + e.getMessage());
     }
 
+    // Interface pour les suggestions de valeurs
+    public interface PropertySuggester {
+        String suggestValue(String propertyKey);
+    }
+
     // Classe interne pour gérer les résultats
     private static class PropertyCheckResult {
         private final String key;
@@ -134,11 +134,6 @@ public class PropertyPresenceChecker implements CustomChecker, InitializableChec
         String getSuggestion() {
             return suggestion;
         }
-    }
-
-    // Interface pour les suggestions de valeurs
-    public interface PropertySuggester {
-        String suggestValue(String propertyKey);
     }
 
     // Implémentation par défaut

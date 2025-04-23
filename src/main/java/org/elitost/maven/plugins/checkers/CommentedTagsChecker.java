@@ -209,18 +209,14 @@ public class CommentedTagsChecker implements CustomChecker, InitializableChecker
             rows.add(formatCommentedBlockRow(block));
         }
         report.append(renderer.renderTable(
-                new String[]{"Bloc XML commenté", "Balises détectées", "Propriétés détectées"},
+                new String[]{"Bloc XML commenté"},
                 rows.toArray(new String[0][])
         ));
     }
 
     private String[] formatCommentedBlockRow(CommentedBlock block) {
-        String tags = String.join(", ", block.tags);
-        String properties = String.join(", ", block.properties);
         return new String[]{
-                formatCommentAsHtml(block.content),
-                tags.isEmpty() ? "Aucune balise significative détectée" : tags,
-                properties.isEmpty() ? "Aucune propriété détectée" : properties
+                formatCommentAsHtml(block.content)
         };
     }
 
@@ -228,7 +224,7 @@ public class CommentedTagsChecker implements CustomChecker, InitializableChecker
         report.append(renderer.renderHeader3("Suggestions"))
                 .append(renderer.renderParagraph(
                         "Pour résoudre ces problèmes :\n" +
-                                "• Décommenter les balises ou propriétés si elles sont nécessaires à la configuration\n" +
+                                "• Dé commenter les balises ou propriétés si elles sont nécessaires à la configuration\n" +
                                 "• Supprimer entièrement les commentaires s'ils ne sont plus pertinents\n" +
                                 "• Ajouter un commentaire explicatif si le code commenté est conservé intentionnellement"
                 ))

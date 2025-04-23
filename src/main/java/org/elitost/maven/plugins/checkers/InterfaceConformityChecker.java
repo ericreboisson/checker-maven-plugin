@@ -7,7 +7,8 @@ import org.elitost.maven.plugins.renderers.ReportRenderer;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -30,7 +31,7 @@ import java.util.stream.Stream;
 public class InterfaceConformityChecker implements CustomChecker, BasicInitializableChecker {
 
     private static final String DEFAULT_INSPECTOR_METHOD = "ClassInspector.logClassName";
-    private static final Pattern LOG_CALL_PATTERN = Pattern.compile("([\\w]+)\\.logClassName\\(([^)]+)\\.class\\)");
+    private static final Pattern LOG_CALL_PATTERN = Pattern.compile("(\\w+)\\.logClassName\\(([^)]+)\\.class\\)");
     private static final Pattern INTERFACE_PATTERN = Pattern.compile("\\binterface\\s+([\\w<]+)");
 
     private Log log;
@@ -53,21 +54,6 @@ public class InterfaceConformityChecker implements CustomChecker, BasicInitializ
         this.includePattern = null;
         this.excludePattern = null;
         this.inspectorMethod = DEFAULT_INSPECTOR_METHOD;
-    }
-
-    public void configure(Map<String, String> properties) {
-        if (properties.containsKey("interfaceConformity.skip")) {
-            this.skip = Boolean.parseBoolean(properties.get("interfaceConformity.skip"));
-        }
-        if (properties.containsKey("interfaceConformity.includePattern")) {
-            this.includePattern = Pattern.compile(properties.get("interfaceConformity.includePattern"));
-        }
-        if (properties.containsKey("interfaceConformity.excludePattern")) {
-            this.excludePattern = Pattern.compile(properties.get("interfaceConformity.excludePattern"));
-        }
-        if (properties.containsKey("interfaceConformity.inspectorMethod")) {
-            this.inspectorMethod = properties.get("interfaceConformity.inspectorMethod");
-        }
     }
 
     @Override
@@ -112,31 +98,23 @@ public class InterfaceConformityChecker implements CustomChecker, BasicInitializ
         if (includePattern != null && !includePattern.matcher(interfaceName).matches()) {
             return false;
         }
-        if (excludePattern != null && excludePattern.matcher(interfaceName).matches()) {
-            return false;
-        }
-        return true;
+        return excludePattern == null || !excludePattern.matcher(interfaceName).matches();
     }
 
     private String generateUncoveredInterfacesReport(String artifactId, List<String[]> uncovered) {
-        StringBuilder report = new StringBuilder();
-        report.append(renderer.renderHeader3("🧪 Conformité des interfaces de `" + artifactId + "`"));
-        report.append(renderer.openIndentedSection());
 
-        report.append(renderer.renderWarning(String.format(
-                "%d interfaces non référencées par `%s(...)` :",
-                uncovered.size(),
-                inspectorMethod)));
-
-        report.append(renderer.renderTable(
-                new String[]{"Interface non testée"},
-                uncovered.toArray(new String[0][])));
-
-        report.append(renderer.renderParagraph("💡 Conseil : ajoutez des appels à " + inspectorMethod +
-                " dans vos tests pour chaque interface exposée."));
-
-        report.append(renderer.closeIndentedSection());
-        return report.toString();
+        return renderer.renderHeader3("🧪 Conformité des interfaces de `" + artifactId + "`") +
+                renderer.openIndentedSection() +
+                renderer.renderWarning(String.format(
+                        "%d interfaces non référencées par `%s(...)` :",
+                        uncovered.size(),
+                        inspectorMethod)) +
+                renderer.renderTable(
+                        new String[]{"Interface non testée"},
+                        uncovered.toArray(new String[0][])) +
+                renderer.renderParagraph("💡 Conseil : ajoutez des appels à " + inspectorMethod +
+                        " dans vos tests pour chaque interface exposée.") +
+                renderer.closeIndentedSection();
     }
 
     private List<String> collectInterfaceNames(File sourceDir) {

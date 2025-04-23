@@ -1,10 +1,10 @@
 package org.elitost.maven.plugins.checkers;
 
 import org.apache.maven.model.Model;
-import org.elitost.maven.plugins.CheckerContext;
-import org.elitost.maven.plugins.renderers.ReportRenderer;
 import org.apache.maven.plugin.logging.Log;
 import org.apache.maven.project.MavenProject;
+import org.elitost.maven.plugins.CheckerContext;
+import org.elitost.maven.plugins.renderers.ReportRenderer;
 
 import java.io.File;
 import java.nio.file.Files;
@@ -13,7 +13,7 @@ import java.util.stream.Collectors;
 
 /**
  * Analyseur de propriétés redondantes dans un fichier pom.xml.
- * Détecte les propriétés définies dans un module mais jamais utilisées dans aucun pom du projet.
+ * Détecte les propriétés définies dans un module, mais jamais utilisées dans aucun pom du projet.
  */
 public class RedundantPropertiesChecker implements CustomChecker, BasicInitializableChecker {
 

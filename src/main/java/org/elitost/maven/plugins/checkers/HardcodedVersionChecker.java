@@ -1,11 +1,11 @@
 package org.elitost.maven.plugins.checkers;
 
-import org.elitost.maven.plugins.CheckerContext;
-import org.elitost.maven.plugins.renderers.ReportRenderer;
 import org.apache.maven.model.Dependency;
 import org.apache.maven.model.Plugin;
 import org.apache.maven.plugin.logging.Log;
 import org.apache.maven.project.MavenProject;
+import org.elitost.maven.plugins.CheckerContext;
+import org.elitost.maven.plugins.renderers.ReportRenderer;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -17,7 +17,7 @@ import java.util.regex.Pattern;
  */
 public class HardcodedVersionChecker implements CustomChecker, InitializableChecker {
 
-    private static final Pattern PROPERTY_PATTERN = Pattern.compile("\\$\\{.+?\\}");
+    private static final Pattern PROPERTY_PATTERN = Pattern.compile("\\$\\{.+?}");
     private static final String SCOPES_TO_IGNORE = "test|provided|system|import";
 
     private Log log;
@@ -26,7 +26,8 @@ public class HardcodedVersionChecker implements CustomChecker, InitializableChec
     private boolean ignoreOptionalDeps;
     private boolean ignoreSpecificScopes;
 
-    public HardcodedVersionChecker() {}
+    public HardcodedVersionChecker() {
+    }
 
     @Override
     public void init(Log log,
@@ -83,7 +84,7 @@ public class HardcodedVersionChecker implements CustomChecker, InitializableChec
         report.append(renderer.renderError(
                 "Les dépendances suivantes utilisent une version définie en dur dans le pom.xml :\n"));
 
-        String[] headers = { "🏷️ Group ID", "📘 Artifact ID", "🔢 Version", "🎯 Scope" };
+        String[] headers = {"🏷️ Group ID", "📘 Artifact ID", "🔢 Version", "🎯 Scope"};
         String[][] rows = hardcodedDeps.stream()
                 .map(dep -> {
                     log.warn(String.format("[%s] Version codée en dur: %s:%s:%s (scope: %s)",
@@ -106,7 +107,7 @@ public class HardcodedVersionChecker implements CustomChecker, InitializableChec
         report.append(renderer.renderError(
                 "\nLes plugins suivants utilisent une version définie en dur dans le pom.xml :\n"));
 
-        String[] headers = { "🏷️ Group ID", "📘 Artifact ID", "🔢 Version" };
+        String[] headers = {"🏷️ Group ID", "📘 Artifact ID", "🔢 Version"};
         String[][] rows = hardcodedPlugins.stream()
                 .map(plugin -> {
                     log.warn(String.format("[%s] Plugin version codée en dur: %s:%s:%s",

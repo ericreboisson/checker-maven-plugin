@@ -1,9 +1,9 @@
 package org.elitost.maven.plugins.checkers;
 
-import org.elitost.maven.plugins.CheckerContext;
-import org.elitost.maven.plugins.renderers.ReportRenderer;
 import org.apache.maven.model.Dependency;
+import org.apache.maven.model.ModelBase;
 import org.apache.maven.plugin.logging.Log;
+import org.apache.maven.project.MavenProject;
 import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.artifact.DefaultArtifact;
@@ -11,6 +11,8 @@ import org.eclipse.aether.repository.RemoteRepository;
 import org.eclipse.aether.resolution.VersionRangeRequest;
 import org.eclipse.aether.resolution.VersionRangeResult;
 import org.eclipse.aether.version.Version;
+import org.elitost.maven.plugins.CheckerContext;
+import org.elitost.maven.plugins.renderers.ReportRenderer;
 
 import java.util.*;
 import java.util.concurrent.*;
@@ -28,11 +30,11 @@ public class OutdatedDependenciesChecker implements CustomChecker, Initializable
     private List<RemoteRepository> remoteRepositories;
     private ReportRenderer renderer;
 
-    private boolean skip;
-    private Set<String> ignoreScopes;
-    private Pattern ignoreGroupsPattern;
-    private int timeoutSeconds;
-    private boolean showAll;
+    private final boolean skip;
+    private final Set<String> ignoreScopes;
+    private final Pattern ignoreGroupsPattern;
+    private final int timeoutSeconds;
+    private final boolean showAll;
     private ExecutorService executorService;
 
     public OutdatedDependenciesChecker() {
@@ -57,26 +59,6 @@ public class OutdatedDependenciesChecker implements CustomChecker, Initializable
         this.executorService = Executors.newWorkStealingPool();
     }
 
-    public void configure(Map<String, String> properties) {
-        if (properties.containsKey("outdatedDependencies.skip")) {
-            this.skip = Boolean.parseBoolean(properties.get("outdatedDependencies.skip"));
-        }
-        if (properties.containsKey("outdatedDependencies.ignoreScopes")) {
-            this.ignoreScopes = Arrays.stream(properties.get("outdatedDependencies.ignoreScopes").split(","))
-                    .map(String::trim)
-                    .collect(Collectors.toSet());
-        }
-        if (properties.containsKey("outdatedDependencies.ignoreGroups")) {
-            this.ignoreGroupsPattern = Pattern.compile(properties.get("outdatedDependencies.ignoreGroups"));
-        }
-        if (properties.containsKey("outdatedDependencies.timeout")) {
-            this.timeoutSeconds = Integer.parseInt(properties.get("outdatedDependencies.timeout"));
-        }
-        if (properties.containsKey("outdatedDependencies.showAll")) {
-            this.showAll = Boolean.parseBoolean(properties.get("outdatedDependencies.showAll"));
-        }
-    }
-
     @Override
     public String getId() {
         return "outdatedDependencies";
@@ -90,8 +72,8 @@ public class OutdatedDependenciesChecker implements CustomChecker, Initializable
         }
 
         List<Dependency> dependencies = Optional.ofNullable(checkerContext.getCurrentModule())
-                .map(project -> project.getOriginalModel())
-                .map(model -> model.getDependencies())
+                .map(MavenProject::getOriginalModel)
+                .map(ModelBase::getDependencies)
                 .orElse(Collections.emptyList());
 
         if (dependencies.isEmpty()) {
@@ -123,10 +105,7 @@ public class OutdatedDependenciesChecker implements CustomChecker, Initializable
         if (dep.getScope() != null && ignoreScopes.contains(dep.getScope())) {
             return false;
         }
-        if (ignoreGroupsPattern != null && ignoreGroupsPattern.matcher(dep.getGroupId()).matches()) {
-            return false;
-        }
-        return true;
+        return ignoreGroupsPattern == null || !ignoreGroupsPattern.matcher(dep.getGroupId()).matches();
     }
 
     private DependencyInfo checkDependencyVersion(Dependency dep) {
@@ -166,22 +145,18 @@ public class OutdatedDependenciesChecker implements CustomChecker, Initializable
     }
 
     private String findLatestStableVersion(Collection<Version> versions) {
-        return Optional.ofNullable(versions)
-                .map(v -> v.stream()
+        return Optional.ofNullable(versions).flatMap(v -> v.stream()
                         .filter(ver -> ver != null && !ver.toString().toUpperCase().contains("SNAPSHOT"))
                         .max(Comparator.naturalOrder())
-                        .map(Version::toString)
-                        .orElse(null))
+                        .map(Version::toString))
                 .orElse(null);
     }
 
     private String findLatestVersion(Collection<Version> versions) {
-        return Optional.ofNullable(versions)
-                .map(v -> v.stream()
+        return Optional.ofNullable(versions).flatMap(v -> v.stream()
                         .filter(Objects::nonNull)
                         .max(Comparator.naturalOrder())
-                        .map(Version::toString)
-                        .orElse(null))
+                        .map(Version::toString))
                 .orElse(null);
     }
 

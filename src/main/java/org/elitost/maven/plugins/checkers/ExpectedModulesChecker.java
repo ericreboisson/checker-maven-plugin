@@ -1,22 +1,13 @@
 package org.elitost.maven.plugins.checkers;
 
-import org.elitost.maven.plugins.CheckerContext;
-import org.elitost.maven.plugins.renderers.ReportRenderer;
 import org.apache.maven.plugin.logging.Log;
 import org.apache.maven.project.MavenProject;
+import org.elitost.maven.plugins.CheckerContext;
+import org.elitost.maven.plugins.renderers.ReportRenderer;
+import org.elitost.maven.plugins.utils.Symbols;
 
 import java.io.File;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -50,7 +41,9 @@ public class ExpectedModulesChecker implements CustomChecker, BasicInitializable
     private Log log;
     private ReportRenderer renderer;
 
-    /** Constructeur requis pour le chargement SPI */
+    /**
+     * Constructeur requis pour le chargement SPI
+     */
     public ExpectedModulesChecker() {
     }
 
@@ -97,12 +90,12 @@ public class ExpectedModulesChecker implements CustomChecker, BasicInitializable
                 // Génère un rapport détaillé des problèmes
                 generateIssuesReport(report, analysisResult);
             } else {
-                String successMessage = "✅ Tous les modules attendus sont présents et correctement déclarés.";
+                String successMessage = Symbols.OK + "Tous les modules attendus sont présents et correctement déclarés.";
                 report.append(renderer.renderParagraph(successMessage));
                 log.info("[ModuleChecker] " + successMessage);
             }
 
-            // Affiche les modules déclarés mais non attendus par convention
+            // Affiche les modules déclarés, mais non attendus par convention
             detectExtraModules(report, project, expectedModules, excludedModules);
 
         } catch (Exception e) {
@@ -144,6 +137,7 @@ public class ExpectedModulesChecker implements CustomChecker, BasicInitializable
         }
         return excludes;
     }
+
 
     /**
      * Récupère les modules optionnels configurés
@@ -245,7 +239,7 @@ public class ExpectedModulesChecker implements CustomChecker, BasicInitializable
         String[][] rows = modules.stream()
                 .map(module -> {
                     log.warn("[ModuleChecker] " + columnHeader + " : " + module);
-                    return new String[]{ module };
+                    return new String[]{module};
                 })
                 .toArray(String[][]::new);
 
@@ -253,7 +247,7 @@ public class ExpectedModulesChecker implements CustomChecker, BasicInitializable
     }
 
     /**
-     * Détecte et signale les modules déclarés mais non attendus par convention
+     * Détecte et signale les modules déclarés, mais non attendus par convention
      */
     private void detectExtraModules(StringBuilder report, MavenProject project, List<String> expectedModules, Set<String> excludedModules) {
         Set<String> declaredModules = new HashSet<>(project.getModules());
@@ -270,7 +264,7 @@ public class ExpectedModulesChecker implements CustomChecker, BasicInitializable
             ));
 
             String[][] rows = extraModules.stream()
-                    .map(module -> new String[]{ module })
+                    .map(module -> new String[]{module})
                     .toArray(String[][]::new);
 
             report.append(renderer.renderTable(new String[]{"Module supplémentaire"}, rows));
