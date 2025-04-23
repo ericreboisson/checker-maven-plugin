@@ -4,7 +4,10 @@ import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugin.logging.Log;
-import org.apache.maven.plugins.annotations.*;
+import org.apache.maven.plugins.annotations.Component;
+import org.apache.maven.plugins.annotations.LifecyclePhase;
+import org.apache.maven.plugins.annotations.Mojo;
+import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
 import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
@@ -14,8 +17,12 @@ import org.elitost.maven.plugins.checkers.CustomChecker;
 import org.elitost.maven.plugins.checkers.InitializableChecker;
 import org.elitost.maven.plugins.factory.ReportRendererFactory;
 import org.elitost.maven.plugins.renderers.ReportRenderer;
+import org.elitost.maven.plugins.utils.Symbols;
 
-import java.io.*;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.text.SimpleDateFormat;
@@ -26,6 +33,11 @@ import java.util.stream.Collectors;
 
 /**
  * Plugin Maven de vérification modulaire avec analyse avancée des projets multi-modules.
+ * Ce plugin permet d'exécuter des vérifications personnalisées sur les modules d'un projet
+ * et génère des rapports détaillés sur les résultats.
+ *
+ * @author Votre Nom
+ * @since 1.0
  */
 @Mojo(name = "check", defaultPhase = LifecyclePhase.VERIFY, threadSafe = true)
 public class ModuleCheckerMojo extends AbstractMojo {
@@ -40,48 +52,208 @@ public class ModuleCheckerMojo extends AbstractMojo {
             ".warning { color: #f39c12; font-weight: bold; }\n" +
             ".error { color: #e74c3c; font-weight: bold; }\n" +
             "footer { margin-top: 30px; font-size: 0.8em; color: #7f8c8d; text-align: center; }";
-
-    @Parameter(property = "format", defaultValue = "html")
-    private List<String> formats;
-
-    @Parameter(property = "checkersToRun")
-    private List<String> checkersToRun;
-
-    @Parameter(property = "propertiesToCheck")
-    private List<String> propertiesToCheck;
-
-    @Parameter(property = "failOnError", defaultValue = "false")
-    private boolean failOnError;
-
-    @Parameter(property = "reportFileName", defaultValue = "module-check-report")
-    private String reportFileName;
-
-    @Parameter(property = "reportOutputDirectory", defaultValue = "${project.build.directory}/checker-reports")
-    private File reportOutputDirectory;
-
-    @Parameter(property = "checkerTimeout", defaultValue = "30")
-    private int checkerTimeout;
-
-    @Parameter(defaultValue = "${repositorySystemSession}", readonly = true)
-    private RepositorySystemSession repoSession;
-
-    @Component
-    private RepositorySystem repoSystem;
-
-    @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true)
-    private List<RemoteRepository> remoteRepositories;
-
-    @Parameter(defaultValue = "${project}", readonly = true)
-    private MavenProject project;
-
-    @Parameter(property = "excludeModules")
-    private List<String> excludeModules;
-
-    @Parameter(property = "verbose", defaultValue = "false")
-    private boolean verbose;
-
     private final List<CustomChecker> checkers = new CopyOnWriteArrayList<>();
     private final AtomicInteger errorCount = new AtomicInteger(0);
+    /**
+     * Formats de sortie pour les rapports générés.
+     * Les formats supportés sont : "html", "markdown" (ou "md"), et "text".
+     * Plusieurs formats peuvent être spécifiés pour générer des rapports dans différents formats simultanément.
+     * Si le format "md" est spécifié, il sera traité comme "markdown".
+     * Si aucun format n'est spécifié ou si les formats spécifiés sont invalides, le format par défaut "html" sera utilisé.
+     * Exemple de configuration :
+     * <pre>
+     * {@code
+     * <configuration>
+     *     <formats>
+     *         <format>html</format>
+     *         <format>markdown</format>
+     *     </formats>
+     * </configuration>
+     * }
+     * </pre>
+     * <p>
+     * Peut également être défini via la ligne de commande: {@code -Dformat=html,markdown}
+     */
+    @Parameter(property = "format", defaultValue = "html")
+    private List<String> formats;
+    /**
+     * Liste des vérificateurs (checkers) à exécuter.
+     * Si non spécifié, tous les vérificateurs disponibles seront exécutés.
+     * Les vérificateurs sont identifiés par leur ID unique.
+     * Exemple de configuration :
+     * <pre>
+     * {@code
+     * <configuration>
+     *     <checkersToRun>
+     *         <checker>dependencyCheck</checker>
+     *         <checker>propertyPresence</checker>
+     *         <checker>interfaceConformity</checker>
+     *     </checkersToRun>
+     * </configuration>
+     * }
+     * </pre>
+     * <p>
+     * Peut également être défini via la ligne de commande: {@code -DcheckersToRun=dependencyCheck,propertyPresence}
+     */
+    @Parameter(property = "checkersToRun")
+    private List<String> checkersToRun;
+    /**
+     * Liste des propriétés à vérifier par le vérificateur "propertyPresence".
+     * Ces propriétés seront recherchées dans les fichiers de configuration des modules
+     * pour s'assurer qu'elles sont correctement définies.
+     * Exemple de configuration :
+     * <pre>
+     * {@code
+     * <configuration>
+     *     <propertiesToCheck>
+     *         <property>project.version</property>
+     *         <property>sonar.java.source</property>
+     *         <property>maven.compiler.target</property>
+     *     </propertiesToCheck>
+     * </configuration>
+     * }
+     * </pre>
+     * <p>
+     * Peut également être défini via la ligne de commande: {@code -DpropertiesToCheck=project.version,sonar.java.source}
+     * ou en tant que propriété système: {@code -DpropertiesToCheck=project.version,sonar.java.source}
+     */
+    @Parameter(property = "propertiesToCheck")
+    private List<String> propertiesToCheck;
+    /**
+     * Indique si le build doit échouer lorsque des erreurs sont détectées par les vérificateurs.
+     * Si défini à true, le build échouera avec une MojoFailureException lorsque au moins une erreur est trouvée.
+     * Si défini à false (par défaut), le build continuera même si des erreurs sont détectées,
+     * mais les erreurs seront tout de même rapportées dans les logs et les rapports générés.
+     * Exemple de configuration :
+     * <pre>
+     * {@code
+     * <configuration>
+     *     <failOnError>true</failOnError>
+     * </configuration>
+     * }
+     * </pre>
+     * <p>
+     * Peut également être défini via la ligne de commande: {@code -DfailOnError=true}
+     */
+    @Parameter(property = "failOnError", defaultValue = "false")
+    private boolean failOnError;
+    /**
+     * Nom de base pour les fichiers de rapport générés.
+     * Le nom final du fichier sera composé de ce nom de base, suivi d'un horodatage
+     * et de l'extension correspondant au format du rapport.
+     * Exemple : Si reportFileName="module-check-report", le fichier généré pourrait être
+     * "module-check-report-20230421-143045.html"
+     * Exemple de configuration :
+     * <pre>
+     * {@code
+     * <configuration>
+     *     <reportFileName>my-module-analysis</reportFileName>
+     * </configuration>
+     * }
+     * </pre>
+     * <p>
+     * Peut également être défini via la ligne de commande: {@code -DreportFileName=my-module-analysis}
+     */
+    @Parameter(property = "reportFileName", defaultValue = "module-check-report")
+    private String reportFileName;
+    /**
+     * Répertoire où les rapports générés seront écrits.
+     * Si le répertoire n'existe pas, il sera créé.
+     * Par défaut, les rapports sont générés dans le dossier "checker-reports" du répertoire de build du projet.
+     * Exemple de configuration :
+     * <pre>
+     * {@code
+     * <configuration>
+     *     <reportOutputDirectory>${project.build.directory}/analysis-reports</reportOutputDirectory>
+     * </configuration>
+     * }
+     * </pre>
+     * <p>
+     * Peut également être défini via la ligne de commande :
+     * {@code -DreportOutputDirectory=/path/to/reports}
+     */
+    @Parameter(property = "reportOutputDirectory", defaultValue = "${project.build.directory}/checker-reports")
+    private File reportOutputDirectory;
+    /**
+     * Délai d'expiration (en secondes) pour l'exécution de chaque vérificateur.
+     * Si un vérificateur dépasse ce délai, son exécution sera interrompue et une erreur sera signalée.
+     * Cette valeur doit être supérieure à zéro.
+     * Exemple de configuration :
+     * <pre>
+     * {@code
+     * <configuration>
+     *     <checkerTimeout>60</checkerTimeout>
+     * </configuration>
+     * }
+     * </pre>
+     * <p>
+     * Peut également être défini via la ligne de commande: {@code -DcheckerTimeout=60}
+     */
+    @Parameter(property = "checkerTimeout", defaultValue = "30")
+    private int checkerTimeout;
+    /**
+     * Session du système de dépôt Maven.
+     * Ce paramètre est injecté automatiquement par Maven et ne nécessite pas de configuration manuelle.
+     */
+    @Parameter(defaultValue = "${repositorySystemSession}", readonly = true)
+    private RepositorySystemSession repoSession;
+    /**
+     * Système de dépôt Maven.
+     * Ce composant est injecté automatiquement par Maven et ne nécessite pas de configuration manuelle.
+     */
+    @Component
+    private RepositorySystem repoSystem;
+    /**
+     * Liste des dépôts distants du projet.
+     * Ce paramètre est injecté automatiquement par Maven et ne nécessite pas de configuration manuelle.
+     */
+    @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true)
+    private List<RemoteRepository> remoteRepositories;
+    /**
+     * Projet Maven courant.
+     * Ce paramètre est injecté automatiquement par Maven et ne nécessite pas de configuration manuelle.
+     */
+    @Parameter(defaultValue = "${project}", readonly = true)
+    private MavenProject project;
+    /**
+     * Liste des modules à exclure de l'analyse.
+     * Les modules dont artifactId commence par l'une des valeurs spécifiées seront ignorés.
+     * Utile pour exclure certains modules qui ne nécessitent pas de vérification
+     * ou qui pourraient causer des problèmes lors de l'analyse.
+     * Exemple de configuration :
+     * <pre>
+     * {@code
+     * <configuration>
+     *     <excludeModules>
+     *         <module>legacy-</module>
+     *         <module>test-</module>
+     *     </excludeModules>
+     * </configuration>
+     * }
+     * </pre>
+     * <p>
+     * Peut également être défini via la ligne de commande: {@code -DexcludeModules=legacy-,test-}
+     */
+    @Parameter(property = "excludeModules")
+    private List<String> excludeModules;
+    /**
+     * Active le mode verbeux pour la sortie des logs.
+     * Si défini à true, des informations supplémentaires seront affichées dans les logs,
+     * notamment les détails des problèmes détectés dans chaque module.
+     * Utile pour le débogage ou pour obtenir plus d'informations sur les vérifications effectuées.
+     * Exemple de configuration :
+     * <pre>
+     * {@code
+     * <configuration>
+     *     <verbose>true</verbose>
+     * </configuration>
+     * }
+     * </pre>
+     * <p>
+     * Peut également être défini via la ligne de commande: {@code -Dverbose=true}
+     */
+    @Parameter(property = "verbose", defaultValue = "false")
+    private boolean verbose;
     private Log log;
     private boolean runAllCheckers;
 
@@ -102,7 +274,7 @@ public class ModuleCheckerMojo extends AbstractMojo {
         } catch (MojoExecutionException | MojoFailureException e) {
             throw e;
         } catch (Exception e) {
-            throw new MojoExecutionException("❌ Plugin execution failed: " + e.getMessage(), e);
+            throw new MojoExecutionException(Symbols.ERROR + "Plugin execution failed: " + e.getMessage(), e);
         }
     }
 
@@ -131,13 +303,13 @@ public class ModuleCheckerMojo extends AbstractMojo {
         }
 
         if (propertiesToCheck.isEmpty()) {
-            log.warn("⚠️ No properties to check specified via -DpropertiesToCheck");
+            log.warn(Symbols.WARNING + "No properties to check specified via -DpropertiesToCheck");
         }
     }
 
     private void createReportDirectory() throws MojoExecutionException {
         if (!reportOutputDirectory.exists() && !reportOutputDirectory.mkdirs()) {
-            throw new MojoExecutionException("❌ Failed to create report directory: " +
+            throw new MojoExecutionException(Symbols.ERROR + "Failed to create report directory: " +
                     reportOutputDirectory.getAbsolutePath());
         }
     }
@@ -147,19 +319,21 @@ public class ModuleCheckerMojo extends AbstractMojo {
             try {
                 checkers.add(checker);
             } catch (Exception e) {
-                log.error("❌ Failed to load checker: " + checker.getClass().getName(), e);
+                log.error(Symbols.ERROR + "Failed to load checker: " + checker.getClass().getName(), e);
             }
         });
 
         if (checkers.isEmpty()) {
-            log.warn("⚠️ No checkers found via SPI");
+            log.warn(Symbols.WARNING + "No checkers found via SPI");
         }
     }
 
     private void logConfiguration() {
         log.info("📋 Plugin configuration:");
-        log.info("- Output formats: " + formats);
+        log.info("- Output formats: " + (formats == null ? "default (html)" : formats));
         log.info("- Report directory: " + reportOutputDirectory.getAbsolutePath());
+        log.info("- Fail on error: " + failOnError);
+        log.info("- Verbose mode: " + verbose);
 
         List<String> checkerIds = checkers.stream()
                 .map(CustomChecker::getId)
@@ -174,18 +348,27 @@ public class ModuleCheckerMojo extends AbstractMojo {
                     .collect(Collectors.toList());
 
             if (!invalidCheckers.isEmpty()) {
-                log.warn("❌ Invalid checkers specified: " + String.join(", ", invalidCheckers));
+                log.warn(Symbols.ERROR + "Invalid checkers specified: " + String.join(", ", invalidCheckers));
             }
 
-            log.info("✅ Selected checkers: " + checkersToRun);
+            log.info(Symbols.OK + "Selected checkers: " + checkersToRun);
         } else {
-            log.info("✅ All checkers will be executed");
+            log.info(Symbols.OK + "All checkers will be executed");
         }
     }
 
     private void validateParameters() throws MojoExecutionException {
         if (checkerTimeout <= 0) {
             throw new MojoExecutionException("checkerTimeout must be > 0");
+        }
+        if (formats != null && formats.stream().anyMatch(format -> !SUPPORTED_FORMATS.contains(format.toLowerCase()))) {
+            throw new MojoExecutionException("Invalid output format specified. Supported formats: " + SUPPORTED_FORMATS);
+        }
+        if (reportFileName == null || reportFileName.trim().isEmpty()) {
+            throw new MojoExecutionException("reportFileName cannot be null or empty");
+        }
+        if (reportOutputDirectory == null) {
+            throw new MojoExecutionException("reportOutputDirectory cannot be null");
         }
     }
 
@@ -211,7 +394,7 @@ public class ModuleCheckerMojo extends AbstractMojo {
                 .collect(Collectors.toList());
 
         if (validFormats.isEmpty()) {
-            log.warn("⚠️ No valid formats specified. Using default: html");
+            log.warn(Symbols.WARNING + " No valid formats specified. Using default: html");
             return List.of("html");
         }
 
@@ -222,26 +405,30 @@ public class ModuleCheckerMojo extends AbstractMojo {
         initializeCheckers(renderer);
         Map<MavenProject, String> reports = new ConcurrentHashMap<>();
 
-        // Process parent first
+        // Process parent module first
         reports.put(project, generateModuleReport(project, renderer, true));
 
-        // Process child modules in parallel
-        ForkJoinPool customPool = new ForkJoinPool(Runtime.getRuntime().availableProcessors());
+        // Process child modules with a fixed thread pool
+        int maxThreads = Math.min(Runtime.getRuntime().availableProcessors(), 4); // Limite à 4 threads max
+        ExecutorService executor = Executors.newFixedThreadPool(maxThreads);
+
         try {
-            customPool.submit(() ->
-                    project.getCollectedProjects().parallelStream()
-                            .filter(this::shouldProcessModule)
-                            .forEach(module ->
-                                    reports.put(module, generateModuleReport(module, renderer, false))
-                            )
-            ).get();
+            List<Future<?>> futures = project.getCollectedProjects().stream()
+                    .filter(this::shouldProcessModule)
+                    .map(module -> executor.submit(() ->
+                            reports.put(module, generateModuleReport(module, renderer, false))))
+                    .collect(Collectors.toList());
+
+            for (Future<?> future : futures) {
+                future.get(); // Attendre la fin de chaque tâche
+            }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            log.error("❌ Module analysis interrupted", e);
+            log.error(Symbols.ERROR + " Module analysis interrupted", e);
         } catch (ExecutionException e) {
-            log.error("❌ Error during module analysis", e);
+            log.error(Symbols.ERROR + " Error during module analysis", e);
         } finally {
-            customPool.shutdown();
+            executor.shutdown();
         }
 
         return reports;
@@ -262,7 +449,7 @@ public class ModuleCheckerMojo extends AbstractMojo {
                     ((InitializableChecker) checker).init(log, repoSystem, repoSession, remoteRepositories, renderer);
                 }
             } catch (Exception e) {
-                log.error("❌ Error initializing checker " + checker.getId(), e);
+                log.error(Symbols.ERROR + " Error initializing checker " + checker.getId(), e);
             }
         });
     }
@@ -295,11 +482,7 @@ public class ModuleCheckerMojo extends AbstractMojo {
             return false;
         }
 
-        if ("interfaceConformity".equals(checkerId) && !module.getArtifactId().endsWith("-api")) {
-            return false;
-        }
-
-        return true;
+        return !"interfaceConformity".equals(checkerId) || module.getArtifactId().endsWith("-api");
     }
 
     private String runCheckerWithTimeout(CustomChecker checker, CheckerContext context, ReportRenderer renderer) {
@@ -309,12 +492,12 @@ public class ModuleCheckerMojo extends AbstractMojo {
         try {
             return future.get(checkerTimeout, TimeUnit.SECONDS);
         } catch (TimeoutException e) {
-            log.warn("⏱️ Checker timeout: " + checker.getId());
+            log.warn(Symbols.TIMEOUT + "Checker timeout: " + checker.getId());
             future.cancel(true);
-            return renderer.renderParagraph("⏱️ Checker timeout: " + checker.getId());
+            return renderer.renderParagraph(Symbols.TIMEOUT + "Checker timeout: " + checker.getId());
         } catch (Exception e) {
-            log.error("❌ Error executing checker " + checker.getId(), e);
-            return renderer.renderParagraph("❌ Error: " + e.getMessage());
+            log.error(Symbols.ERROR + " Error executing checker " + checker.getId(), e);
+            return renderer.renderParagraph(Symbols.ERROR + " Error: " + e.getMessage());
         } finally {
             executor.shutdownNow();
         }
@@ -323,7 +506,7 @@ public class ModuleCheckerMojo extends AbstractMojo {
     private String executeChecker(CustomChecker checker, CheckerContext context, ReportRenderer renderer) {
         try {
             String report = checker.generateReport(context);
-            if (report.contains("❌") || report.contains("⚠️")) {
+            if (report.contains(Symbols.ERROR) || report.contains(Symbols.WARNING)) {
                 errorCount.incrementAndGet();
                 if (verbose) {
                     log.warn("Issue found by " + checker.getId() + " in " +
@@ -332,7 +515,7 @@ public class ModuleCheckerMojo extends AbstractMojo {
             }
             return report;
         } catch (Exception e) {
-            log.error("❌ Checker execution failed: " + checker.getId(), e);
+            log.error(Symbols.ERROR + " Checker execution failed: " + checker.getId(), e);
             return renderer.renderError("Checker failed: " + e.getMessage());
         }
     }
@@ -350,9 +533,9 @@ public class ModuleCheckerMojo extends AbstractMojo {
         // Summary
         if (errorCount.get() > 0) {
             content.append(renderer.renderHeader2("Summary"));
-            content.append(renderer.renderParagraph("⚠️ " + errorCount.get() + " issues detected"));
+            content.append(renderer.renderParagraph(Symbols.WARNING + " " + errorCount.get() + " issues detected"));
         } else {
-            content.append(renderer.renderParagraph("✅ No issues detected"));
+            content.append(renderer.renderParagraph(Symbols.OK + "No issues detected"));
         }
 
         // Parent report first
@@ -376,15 +559,18 @@ public class ModuleCheckerMojo extends AbstractMojo {
             writer.write(formatReportContent(format, content));
             log.info("📄 Report generated: " + outputFile.getAbsolutePath());
         } catch (IOException e) {
-            throw new MojoExecutionException("❌ Failed to write " + format + " report", e);
+            throw new MojoExecutionException(Symbols.ERROR + " Failed to write " + format + " report", e);
         }
     }
 
     private String getFileExtension(String format) {
         switch (format.toLowerCase()) {
-            case "markdown": return "md";
-            case "text": return "txt";
-            default: return "html";
+            case "markdown":
+                return "md";
+            case "text":
+                return "txt";
+            default:
+                return "html";
         }
     }
 
@@ -412,14 +598,17 @@ public class ModuleCheckerMojo extends AbstractMojo {
         try (InputStream is = getClass().getResourceAsStream("/assets/css/style.css")) {
             return is != null ? new String(is.readAllBytes(), StandardCharsets.UTF_8) : DEFAULT_CSS;
         } catch (IOException e) {
-            log.warn("⚠️ Could not load CSS, using default style", e);
+            log.warn(Symbols.WARNING + "Could not load CSS, using default style", e);
             return DEFAULT_CSS;
         }
     }
 
     private void handleFailures() throws MojoFailureException {
         if (failOnError && errorCount.get() > 0) {
-            throw new MojoFailureException("❌ " + errorCount.get() + " errors detected. Check reports for details.");
+            log.error(Symbols.ERROR + errorCount.get() + " errors detected. Check reports for details.");
+            throw new MojoFailureException(Symbols.ERROR + errorCount.get() + " errors detected. Build failed.");
+        } else if (errorCount.get() > 0) {
+            log.warn(Symbols.WARNING + errorCount.get() + " errors detected. Build will continue.");
         }
     }
 }
