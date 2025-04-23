@@ -13,29 +13,66 @@ import java.nio.file.Files;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * Checker Maven qui détecte les balises XML significatives commentées dans un fichier pom.xml.
- * Cela inclut par exemple les balises <dependencies>, <build>, <plugins>, etc.
+ * Cela inclut par exemple les balises {@code <dependencies>}, {@code <build>}, {@code <plugins>}, etc.
+ * <p>
+ * Les commentaires contenant des balises importantes peuvent indiquer une configuration
+ * qui a été temporairement désactivée ou des tests de configuration, ce qui peut
+ * conduire à des comportements inattendus lors de la construction.
  */
 public class CommentedTagsChecker implements CustomChecker, InitializableChecker {
 
-    private static final Set<String> TAG_WHITELIST = new HashSet<>(Arrays.asList(
+    /**
+     * Liste par défaut des balises Maven significatives à surveiller
+     */
+    private static final Set<String> DEFAULT_TAG_WHITELIST = new HashSet<>(Arrays.asList(
+            // Tags de base du POM
             "modelVersion", "parent", "groupId", "artifactId", "version", "packaging", "name", "description", "url",
-            "inceptionYear", "licenses", "license", "organization", "developers", "developer", "scm", "issueManagement",
-            "ciManagement", "distributionManagement", "repositories", "repository", "pluginRepositories",
-            "pluginRepository", "modules", "dependencies", "dependency", "dependencyManagement", "build", "plugins",
-            "plugin", "pluginManagement", "executions", "execution", "goals", "resources", "resource", "testResources",
-            "testResource", "reporting", "reports", "report", "profiles", "profile", "properties"
+            "inceptionYear",
+            // Informations sur l'organisation et les contributeurs
+            "licenses", "license", "organization", "developers", "developer",
+            // Gestion et infrastructure
+            "scm", "issueManagement", "ciManagement", "distributionManagement",
+            // Référentiels
+            "repositories", "repository", "pluginRepositories", "pluginRepository",
+            // Structure du projet
+            "modules",
+            // Dépendances
+            "dependencies", "dependency", "dependencyManagement",
+            // Construction
+            "build", "plugins", "plugin", "pluginManagement", "executions", "execution", "goals",
+            // Ressources
+            "resources", "resource", "testResources", "testResource",
+            // Rapports
+            "reporting", "reports", "report",
+            // Profils et propriétés
+            "profiles", "profile", "properties"
     ));
 
+    /**
+     * Motif pour extraire les commentaires XML
+     */
     private static final Pattern COMMENT_PATTERN = Pattern.compile("<!--(.*?)-->", Pattern.DOTALL);
+
+    /**
+     * Motif pour détecter les balises XML
+     */
+    private static final Pattern XML_TAG_PATTERN = Pattern.compile("<\\s*([\\w\\-:]+)[^>]*>", Pattern.DOTALL);
 
     private Log log;
     private ReportRenderer renderer;
+    private final Set<String> tagWhitelist;
+    private int maxCommentLength = 500;
+    private boolean truncateComments = true;
 
+    /**
+     * Constructeur sans argument requis pour SPI
+     */
     public CommentedTagsChecker() {
-        // Constructeur sans argument requis pour SPI
+        this.tagWhitelist = new HashSet<>(DEFAULT_TAG_WHITELIST);
     }
 
     @Override
@@ -61,26 +98,11 @@ public class CommentedTagsChecker implements CustomChecker, InitializableChecker
 
         try {
             String content = Files.readString(pomFile.toPath());
-            List<String> commentedBlocks = extractCommentedXmlBlocks(content);
+            List<CommentedBlock> commentedBlocks = extractCommentedXmlBlocks(content);
 
             if (commentedBlocks.isEmpty()) return "";
 
-            StringBuilder report = new StringBuilder();
-            report.append(renderer.renderHeader3("🪧 Balises XML commentées détectées dans `pom.xml`"));
-            report.append(renderer.openIndentedSection());
-            report.append(renderer.renderParagraph(
-                    "Les balises ci-dessous sont désactivées via des commentaires. " +
-                            "Cela peut provoquer des comportements inattendus."));
-
-            List<String[]> rows = new ArrayList<>();
-            for (String comment : commentedBlocks) {
-                rows.add(new String[]{ formatCommentAsHtml(comment) });
-            }
-
-            report.append(renderer.renderTable(new String[]{"Bloc XML commenté"}, rows.toArray(new String[0][])));
-            report.append(renderer.closeIndentedSection());
-
-            return report.toString();
+            return buildReport(commentedBlocks, checkerContext);
 
         } catch (IOException e) {
             String errorMsg = "Erreur lors de la lecture du pom.xml : " + e.getMessage();
@@ -89,34 +111,109 @@ public class CommentedTagsChecker implements CustomChecker, InitializableChecker
         }
     }
 
-    private List<String> extractCommentedXmlBlocks(String content) {
-        List<String> results = new ArrayList<>();
+    /**
+     * Construit le rapport des blocs commentés
+     */
+    private String buildReport(List<CommentedBlock> commentedBlocks, CheckerContext checkerContext) {
+        StringBuilder report = new StringBuilder();
+        report.append(renderer.renderHeader3("🪧 Balises XML commentées détectées dans `pom.xml`"));
+        report.append(renderer.openIndentedSection());
+        report.append(renderer.renderWarning(
+                "Les balises ci-dessous sont désactivées via des commentaires. " +
+                        "Cela peut provoquer des comportements inattendus ou des configurations manquantes."));
+
+        List<String[]> rows = new ArrayList<>();
+        for (CommentedBlock block : commentedBlocks) {
+
+            rows.add(new String[] {
+                    formatCommentAsHtml(block.content)
+            });
+        }
+
+        report.append(renderer.renderTable(new String[]{"Bloc XML commenté"}, rows.toArray(new String[0][])));
+
+        // Ajouter des suggestions pour résoudre le problème en utilisant seulement renderParagraph
+        report.append(renderer.renderHeader3("Suggestions"));
+        report.append(renderer.renderParagraph(
+                "Pour résoudre ces problèmes :\n" +
+                        "• Décommenter les balises si elles sont nécessaires à la configuration\n" +
+                        "• Supprimer entièrement les commentaires s'ils ne sont plus pertinents\n" +
+                        "• Ajouter un commentaire explicatif si le code commenté est conservé intentionnellement"
+        ));
+
+        report.append(renderer.closeIndentedSection());
+
+        return report.toString();
+    }
+
+    /**
+     * Classe représentant un bloc commenté avec les balises qu'il contient
+     */
+    private static class CommentedBlock {
+        private final String content;
+        private final List<String> tags;
+
+        public CommentedBlock(String content, List<String> tags) {
+            this.content = content;
+            this.tags = tags;
+        }
+    }
+
+    /**
+     * Extrait les blocs XML commentés contenant des balises significatives
+     */
+    private List<CommentedBlock> extractCommentedXmlBlocks(String content) {
+        List<CommentedBlock> results = new ArrayList<>();
         Matcher matcher = COMMENT_PATTERN.matcher(content);
 
         while (matcher.find()) {
             String comment = matcher.group(1).trim();
-            if (containsSignificantTag(comment)) {
-                results.add(comment);
+            List<String> significantTags = extractSignificantTags(comment);
+
+            if (!significantTags.isEmpty()) {
+                results.add(new CommentedBlock(comment, significantTags));
             }
         }
         return results;
     }
 
-    private boolean containsSignificantTag(String comment) {
-        for (String tag : TAG_WHITELIST) {
-            if (comment.matches("(?s).*<\\s*" + tag + "[^>]*>.*")) {
-                return true;
+    /**
+     * Extrait les balises significatives d'un bloc de texte.
+     * Utilise une expression régulière pour identifier toutes les balises XML.
+     */
+    private List<String> extractSignificantTags(String text) {
+        List<String> foundTags = new ArrayList<>();
+        Matcher tagMatcher = XML_TAG_PATTERN.matcher(text);
+
+        while (tagMatcher.find()) {
+            String tagName = tagMatcher.group(1);
+            if (tagWhitelist.contains(tagName)) {
+                foundTags.add(tagName);
             }
         }
-        return false;
+
+        return foundTags;
     }
 
+    /**
+     * Formate un commentaire pour l'affichage HTML
+     * Si le commentaire est trop long, il est tronqué pour améliorer la lisibilité
+     */
     private String formatCommentAsHtml(String comment) {
+        String formattedComment = comment;
+
+        if (truncateComments && comment.length() > maxCommentLength) {
+            formattedComment = comment.substring(0, maxCommentLength) + "... [tronqué]";
+        }
+
         return "<details open><summary>Afficher</summary><pre>" +
-                escapeHtml(comment) +
+                escapeHtml(formattedComment) +
                 "</pre></details>";
     }
 
+    /**
+     * Échappe les caractères spéciaux HTML
+     */
     private String escapeHtml(String input) {
         StringBuilder sb = new StringBuilder(input.length());
         for (char c : input.toCharArray()) {

@@ -9,3 +9,4 @@ org.elitost.maven.plugins.checkers.UnusedDependenciesChecker
 org.elitost.maven.plugins.checkers.UrlChecker
 org.elitost.maven.plugins.checkers.RedefinedDependencyVersionChecker
 org.elitost.maven.plugins.checkers.InterfaceConformityChecker
+org.elitost.maven.plugins.checkers.PropertyRedefinitionChecker

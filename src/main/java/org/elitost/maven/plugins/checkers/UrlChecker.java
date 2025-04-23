@@ -5,22 +5,28 @@ import org.elitost.maven.plugins.CheckerContext;
 import org.elitost.maven.plugins.renderers.ReportRenderer;
 
 import java.io.File;
+import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.file.Files;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.Optional;
 
 /**
- * Vérifie la présence de la balise <url> dans le fichier pom.xml et si l'URL est en HTTPS et répond correctement.
- * Ne génère de rapport que si des problèmes sont détectés.
+ * Vérifie la présence et la validité de la balise <url> dans le POM.
  */
 public class UrlChecker implements CustomChecker, BasicInitializableChecker {
+
+    private static final String CHECKER_ID = "urls";
+    private static final String LOG_PREFIX = "[UrlChecker]";
+    private static final String URL_PATTERN = "<url>(.*?)</url>";
+    private static final String HTTPS_PREFIX = "https://";
+    private static final int CONNECTION_TIMEOUT_MS = 5000;
 
     private Log log;
     private ReportRenderer renderer;
 
-    /** Constructeur requis pour le chargement SPI */
     public UrlChecker() {
         // Constructeur sans argument requis pour SPI
     }
@@ -33,88 +39,117 @@ public class UrlChecker implements CustomChecker, BasicInitializableChecker {
 
     @Override
     public String getId() {
-        return "urls";
+        return CHECKER_ID;
     }
 
-    /**
-     * Génère un rapport **uniquement s’il y a un problème** lié à la balise <url>.
-     *
-     * @param checkerContext le projet Maven
-     * @return un rapport d'erreur ou une chaîne vide si tout est conforme
-     */
     @Override
     public String generateReport(CheckerContext checkerContext) {
-
         String artifactId = checkerContext.getCurrentModule().getArtifactId();
-        StringBuilder report = new StringBuilder();
-        boolean hasIssue = false;
+        Optional<UrlCheckResult> checkResult = checkUrlValidity(checkerContext.getCurrentModule().getFile(), artifactId);
 
-        try {
-            String url = extractUrlFromPom(checkerContext.getCurrentModule().getFile());
-
-            if (url == null || url.isBlank()) {
-                hasIssue = true;
-                report.append(renderer.renderHeader3("🔗 Problème avec la balise <url> dans `" + artifactId + "`"));
-                report.append(renderer.openIndentedSection());
-                report.append(renderer.renderError("Aucune balise `<url>` trouvée dans le `pom.xml`."));
-            } else if (!url.startsWith("https://")) {
-                hasIssue = true;
-                report.append(renderer.renderHeader3("🔗 Problème d'URL non sécurisée dans `" + artifactId + "`"));
-                report.append(renderer.openIndentedSection());
-                report.append(renderer.renderError("L'URL doit commencer par `https://` : " + url));
-                log.warn("[UrlChecker] L'URL n'est pas sécurisée : " + url);
-            } else if (!isUrlResponding(url)) {
-                hasIssue = true;
-                report.append(renderer.renderHeader3("🔗 L'URL ne répond pas dans `" + artifactId + "`"));
-                report.append(renderer.openIndentedSection());
-                report.append(renderer.renderError("L'URL ne répond pas correctement : " + url));
-            }
-
-        } catch (Exception e) {
-            hasIssue = true;
-            report.append(renderer.renderHeader3("🔗 Erreur d’analyse de l’URL dans `" + artifactId + "`"));
-            report.append(renderer.openIndentedSection());
-            String errorMessage = "Erreur lors de la vérification de la balise `<url>` : `" + e.getMessage() + "`";
-            report.append(renderer.renderError(errorMessage));
-            log.error("[UrlChecker] " + errorMessage, e);
-        }
-
-        if (hasIssue) {
-            report.append(renderer.closeIndentedSection());
-            return report.toString();
-        }
-
-        return "";
+        return checkResult
+                .filter(UrlCheckResult::hasIssue)
+                .map(result -> buildReport(artifactId, result))
+                .orElse("");
     }
 
-    private String extractUrlFromPom(File pomFile) {
+    private Optional<UrlCheckResult> checkUrlValidity(File pomFile, String artifactId) {
         try {
-            Pattern pattern = Pattern.compile("<url>(.*?)</url>");
-            String content = new String(Files.readAllBytes(pomFile.toPath()));
-            Matcher matcher = pattern.matcher(content);
+            Optional<String> urlOptional = extractUrlFromPom(pomFile);
 
-            if (matcher.find()) {
-                return matcher.group(1).trim();
+            if (urlOptional.isEmpty()) {
+                return Optional.of(new UrlCheckResult(
+                        "🔗 Problème avec la balise <url> dans `" + artifactId + "`",
+                        "Aucune balise `<url>` trouvée dans le `pom.xml`.",
+                        true
+                ));
             }
+
+            String url = urlOptional.get();
+            if (!url.startsWith(HTTPS_PREFIX)) {
+                log.warn(LOG_PREFIX + " L'URL n'est pas sécurisée : " + url);
+                return Optional.of(new UrlCheckResult(
+                        "🔗 Problème d'URL non sécurisée dans `" + artifactId + "`",
+                        "L'URL doit commencer par `https://` : " + url,
+                        true
+                ));
+            }
+
+            if (!isUrlAccessible(url)) {
+                return Optional.of(new UrlCheckResult(
+                        "🔗 L'URL ne répond pas dans `" + artifactId + "`",
+                        "L'URL ne répond pas correctement : " + url,
+                        true
+                ));
+            }
+
+            return Optional.empty();
         } catch (Exception e) {
-            log.error("Erreur lors de l'extraction de l'URL du fichier pom.xml", e);
+            log.error(LOG_PREFIX + " Erreur lors de la vérification de l'URL", e);
+            return Optional.of(new UrlCheckResult(
+                    "🔗 Erreur d'analyse de l'URL dans `" + artifactId + "`",
+                    "Erreur lors de la vérification de la balise `<url>` : " + e.getMessage(),
+                    true
+            ));
         }
-        return null;
     }
 
-    private boolean isUrlResponding(String urlString) {
-        try {
-            URL url = new URL(urlString);
-            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-            connection.setRequestMethod("GET");
-            connection.setConnectTimeout(5000);
-            connection.setReadTimeout(5000);
-            connection.connect();
+    private Optional<String> extractUrlFromPom(File pomFile) throws IOException {
+        Pattern pattern = Pattern.compile(URL_PATTERN);
+        String content = Files.readString(pomFile.toPath());
+        Matcher matcher = pattern.matcher(content);
 
-            return connection.getResponseCode() == HttpURLConnection.HTTP_OK;
+        if (matcher.find()) {
+            return Optional.of(matcher.group(1).trim());
+        }
+        return Optional.empty();
+    }
+
+    private boolean isUrlAccessible(String urlString) {
+        try {
+            HttpURLConnection connection = (HttpURLConnection) new URL(urlString).openConnection();
+            connection.setRequestMethod("HEAD");
+            connection.setConnectTimeout(CONNECTION_TIMEOUT_MS);
+            connection.setReadTimeout(CONNECTION_TIMEOUT_MS);
+
+            int responseCode = connection.getResponseCode();
+            return responseCode == HttpURLConnection.HTTP_OK;
         } catch (Exception e) {
-            log.error("Erreur lors de la connexion à l'URL : " + urlString, e);
+            log.warn(LOG_PREFIX + " Erreur de connexion à l'URL: " + urlString, e);
             return false;
+        }
+    }
+
+    private String buildReport(String artifactId, UrlCheckResult result) {
+        StringBuilder report = new StringBuilder();
+        report.append(renderer.renderHeader3(result.getTitle()));
+        report.append(renderer.openIndentedSection());
+        report.append(renderer.renderError(result.getMessage()));
+        report.append(renderer.closeIndentedSection());
+        return report.toString();
+    }
+
+    private static class UrlCheckResult {
+        private final String title;
+        private final String message;
+        private final boolean hasIssue;
+
+        UrlCheckResult(String title, String message, boolean hasIssue) {
+            this.title = title;
+            this.message = message;
+            this.hasIssue = hasIssue;
+        }
+
+        String getTitle() {
+            return title;
+        }
+
+        String getMessage() {
+            return message;
+        }
+
+        boolean hasIssue() {
+            return hasIssue;
         }
     }
 }

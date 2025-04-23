@@ -9,158 +9,142 @@ import org.apache.maven.model.Dependency;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Analyseur de dépendances potentiellement non utilisées dans le code source Java.
  */
 public class UnusedDependenciesChecker implements CustomChecker, BasicInitializableChecker {
 
+    private static final String CHECKER_ID = "unusedDependencies";
+    private static final String LOG_PREFIX = "[UnusedDependenciesChecker]";
+    private static final String JAVA_SOURCE_DIR = "src/main/java";
+    private static final String JAVA_FILE_EXTENSION = ".java";
+
     private Log log;
     private ReportRenderer renderer;
+    private final Map<String, List<String>> usageHints;
 
-    /** Constructeur requis pour le chargement SPI */
     public UnusedDependenciesChecker() {
-        // Constructeur sans argument requis pour SPI
+        this.usageHints = initializeUsageHints();
     }
 
     @Override
     public void init(Log log, ReportRenderer renderer) {
         this.log = log;
         this.renderer = renderer;
-        log.debug("[UnusedDependenciesChecker] Initialisé");
+        log.debug(LOG_PREFIX + " Initialisé");
     }
 
     @Override
     public String getId() {
-        return "unusedDependencies";
+        return CHECKER_ID;
     }
 
-    /**
-     * Génère un rapport sur les dépendances probablement inutilisées dans le module.
-     *
-     * @param checkerContext Le projet Maven à analyser.
-     * @return Rapport au format Markdown (ou HTML selon le renderer utilisé).
-     */
     @Override
     public String generateReport(CheckerContext checkerContext) {
-        log.info("[UnusedDependenciesChecker] Analyse des dépendances pour le module : " + checkerContext.getCurrentModule().getArtifactId());
+        try {
+            MavenProject project = checkerContext.getCurrentModule();
+            log.info(LOG_PREFIX + " Analyse des dépendances pour le module : " + project.getArtifactId());
 
-        // 📂 Lecture de tous les fichiers Java
-        List<File> javaFiles = collectJavaFiles(new File(checkerContext.getCurrentModule().getBasedir(), "src/main/java"));
-        String fullJavaSource = javaFiles.stream()
-                .map(this::readFileContent)
-                .collect(Collectors.joining("\n"))
-                .toLowerCase(); // Pour une comparaison insensible à la casse
+            String javaSourceContent = getCombinedJavaSourceContent(project);
+            List<Dependency> unusedDependencies = findUnusedDependencies(project, javaSourceContent);
 
-        // 🔍 Détection des dépendances non utilisées
-        List<Dependency> unusedDependencies = analyzeDependencyUsage(checkerContext.getCurrentModule(), fullJavaSource);
-
-        // 📝 Génération du rapport
-        return renderReport(checkerContext.getCurrentModule(), unusedDependencies);
-    }
-
-    /**
-     * Analyse les dépendances du projet et identifie celles qui semblent inutilisées dans le code source.
-     */
-    private List<Dependency> analyzeDependencyUsage(MavenProject project, String javaCode) {
-        Map<String, List<String>> usageHints = getDefaultUsageHints();
-
-        List<Dependency> unused = new ArrayList<>();
-        for (Dependency dep : project.getOriginalModel().getDependencies()) {
-            if ("test".equalsIgnoreCase(dep.getScope())) continue;
-
-            String key = dep.getGroupId() + ":" + dep.getArtifactId();
-            List<String> hints = usageHints.getOrDefault(key, List.of(
-                    dep.getGroupId(), dep.getArtifactId()
-            ));
-
-            boolean used = hints.stream()
-                    .map(String::toLowerCase)
-                    .anyMatch(javaCode::contains);
-
-            if (!used) {
-                log.warn("⚠️ [UnusedDependenciesChecker] Dépendance non utilisée détectée : " + key);
-                unused.add(dep);
-            }
+            return buildReport(project, unusedDependencies);
+        } catch (Exception e) {
+            log.error(LOG_PREFIX + " Erreur lors de l'analyse", e);
+            return renderer.renderError("❌ Erreur lors de l'analyse des dépendances: " + e.getMessage());
         }
-        return unused;
     }
 
-    /**
-     * Génère le contenu du rapport pour les dépendances inutilisées.
-     */
-    private String renderReport(MavenProject project, List<Dependency> unusedDeps) {
+    private String getCombinedJavaSourceContent(MavenProject project) {
+        Path sourceDir = new File(project.getBasedir(), JAVA_SOURCE_DIR).toPath();
+        try (Stream<Path> paths = Files.walk(sourceDir)) {
+            return paths.filter(Files::isRegularFile)
+                    .filter(path -> path.toString().endsWith(JAVA_FILE_EXTENSION))
+                    .parallel()
+                    .map(this::readFileContent)
+                    .collect(Collectors.joining("\n"))
+                    .toLowerCase();
+        } catch (IOException e) {
+            log.warn(LOG_PREFIX + " Impossible de lire les fichiers sources", e);
+            return "";
+        }
+    }
+
+    private List<Dependency> findUnusedDependencies(MavenProject project, String javaSourceContent) {
+        return Optional.ofNullable(project.getOriginalModel())
+                .map(model -> model.getDependencies().stream()
+                        .filter(dep -> !"test".equalsIgnoreCase(dep.getScope()))
+                        .filter(dep -> !isDependencyUsed(dep, javaSourceContent))
+                        .peek(dep -> log.warn(String.format(
+                                "⚠️ %s Dépendance non utilisée détectée : %s:%s",
+                                LOG_PREFIX,
+                                dep.getGroupId(),
+                                dep.getArtifactId()
+                        )))
+                        .collect(Collectors.toList()))
+                .orElse(Collections.emptyList());
+    }
+
+    private boolean isDependencyUsed(Dependency dep, String javaSourceContent) {
+        String dependencyKey = dep.getGroupId() + ":" + dep.getArtifactId();
+        return usageHints.getOrDefault(dependencyKey, List.of(
+                        dep.getGroupId(),
+                        dep.getArtifactId()
+                )).stream()
+                .map(String::toLowerCase)
+                .anyMatch(javaSourceContent::contains);
+    }
+
+    private String buildReport(MavenProject project, List<Dependency> unusedDeps) {
         if (unusedDeps.isEmpty()) {
-            return ""; // ✅ Rien à signaler, donc on ne retourne pas de rapport
+            return "";
         }
 
         StringBuilder report = new StringBuilder();
         report.append(renderer.renderHeader3("🔍 Dépendances non utilisées dans `" + project.getArtifactId() + "`"));
         report.append(renderer.openIndentedSection());
-
         report.append(renderer.renderWarning("Dépendances potentiellement inutilisées détectées :"));
 
-        String[][] rows = unusedDeps.stream()
+        String[][] tableData = unusedDeps.stream()
                 .map(dep -> new String[]{
                         dep.getGroupId(),
                         dep.getArtifactId(),
-                        dep.getVersion() != null ? dep.getVersion() : "inconnue"
+                        Optional.ofNullable(dep.getVersion()).orElse("inconnue")
                 })
                 .toArray(String[][]::new);
 
         report.append(renderer.renderTable(
                 new String[]{"GroupId", "ArtifactId", "Version"},
-                rows
+                tableData
         ));
-
         report.append(renderer.closeIndentedSection());
 
         return report.toString();
     }
 
-    /**
-     * Récupère récursivement tous les fichiers .java dans le dossier donné.
-     */
-    private List<File> collectJavaFiles(File dir) {
-        if (!dir.exists()) return Collections.emptyList();
-
-        List<File> files = new ArrayList<>();
-        File[] entries = dir.listFiles();
-        if (entries == null) return files;
-
-        for (File file : entries) {
-            if (file.isDirectory()) {
-                files.addAll(collectJavaFiles(file));
-            } else if (file.getName().endsWith(".java")) {
-                files.add(file);
-            }
-        }
-        return files;
-    }
-
-    /**
-     * Lit le contenu d’un fichier texte, ou retourne une chaîne vide en cas d’erreur.
-     */
-    private String readFileContent(File file) {
+    private String readFileContent(Path file) {
         try {
-            return Files.readString(file.toPath());
+            return Files.readString(file);
         } catch (IOException e) {
-            log.warn("❌ Erreur de lecture du fichier : " + file.getAbsolutePath(), e);
+            log.warn(LOG_PREFIX + " Erreur de lecture du fichier: " + file, e);
             return "";
         }
     }
 
-    /**
-     * Table heuristique de correspondance des dépendances connues avec des indices de présence dans le code.
-     */
-    private Map<String, List<String>> getDefaultUsageHints() {
-        Map<String, List<String>> hints = new HashMap<>();
+    private Map<String, List<String>> initializeUsageHints() {
+        Map<String, List<String>> hints = new ConcurrentHashMap<>();
         hints.put("commons-io:commons-io", List.of("org.apache.commons.io", "fileutils"));
         hints.put("org.apache.commons:commons-lang3", List.of("org.apache.commons.lang3", "stringutils"));
         hints.put("com.google.guava:guava", List.of("com.google.common", "lists", "immutablelist"));
         hints.put("org.slf4j:slf4j-api", List.of("org.slf4j", "logger", "loggerfactory"));
+        hints.put("org.junit.jupiter:junit-jupiter", List.of("org.junit.jupiter", "test", "jupiter"));
+        hints.put("org.mockito:mockito-core", List.of("org.mockito", "mock", "mockito"));
         return hints;
     }
 }

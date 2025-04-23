@@ -19,6 +19,7 @@ import java.io.FileReader;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Vérifie si la version du parent dans un fichier pom.xml est à jour.
@@ -26,13 +27,14 @@ import java.util.Objects;
  */
 public class ParentVersionChecker implements CustomChecker, InitializableChecker {
 
+    private static final String POM_EXTENSION = "pom";
+
     private Log log;
     private RepositorySystem repoSystem;
     private RepositorySystemSession session;
     private List<RemoteRepository> remoteRepositories;
     private ReportRenderer renderer;
 
-    /** Constructeur par défaut pour SPI */
     public ParentVersionChecker() {}
 
     @Override
@@ -55,9 +57,19 @@ public class ParentVersionChecker implements CustomChecker, InitializableChecker
 
     @Override
     public String generateReport(CheckerContext checkerContext) {
-        File pomFile = checkerContext.getCurrentModule().getFile();
+        try {
+            return Optional.ofNullable(checkerContext.getCurrentModule())
+                    .map(module -> checkParentVersion(module.getFile(), module.getName()))
+                    .orElse("");
+        } catch (Exception e) {
+            log.error("Erreur lors de la vérification du parent", e);
+            return renderer.renderError("Erreur lors de la vérification du parent : " + e.getMessage());
+        }
+    }
+
+    private String checkParentVersion(File pomFile, String moduleName) {
         if (pomFile == null || !pomFile.exists()) {
-            log.warn("Fichier pom.xml introuvable pour le projet " + checkerContext.getCurrentModule().getName());
+            log.warn("Fichier pom.xml introuvable pour le projet " + moduleName);
             return "";
         }
 
@@ -66,55 +78,71 @@ public class ParentVersionChecker implements CustomChecker, InitializableChecker
             Parent parent = model.getParent();
 
             if (parent == null) {
-                log.error("Aucun parent défini pour le projet " + checkerContext.getCurrentModule().getName());
-
-                StringBuilder report = new StringBuilder();
-                report.append(renderer.renderHeader3("👪 Absence de parent Maven détectée"));
-                report.append(renderer.openIndentedSection());
-                report.append(renderer.renderError("Aucun parent défini pour le projet `" + checkerContext.getCurrentModule().getName() + "`."));
-                report.append(renderer.renderInfo("Si ce module est censé hériter d’un `pom` parent, vérifiez la configuration de l’élément `<parent>`."));
-                report.append(renderer.closeIndentedSection());
-
-                return report.toString();
+                return renderNoParentWarning(moduleName);
             }
 
-            return renderIfOutdated(parent);
-
+            return checkParentVersion(parent);
         } catch (Exception e) {
-            log.error("Erreur lors de l'analyse du parent dans le pom.xml du projet " + checkerContext.getCurrentModule().getName(), e);
+            log.error("Erreur lors de l'analyse du parent dans le pom.xml du projet " + moduleName, e);
             return renderer.renderError("Erreur lors de l'analyse du parent : " + e.getMessage());
         }
     }
 
-    private String renderIfOutdated(Parent parent) {
+    private String renderNoParentWarning(String moduleName) {
+        log.error("Aucun parent défini pour le projet " + moduleName);
+
+        StringBuilder report = new StringBuilder();
+        report.append(renderer.renderHeader3("👪 Absence de parent Maven détectée"));
+        report.append(renderer.openIndentedSection());
+        report.append(renderer.renderError("Aucun parent défini pour le projet `" + moduleName + "`."));
+        report.append(renderer.renderInfo("Si ce module est censé hériter d'un parent, vérifiez la configuration de l'élément <parent>."));
+        report.append(renderer.closeIndentedSection());
+
+        return report.toString();
+    }
+
+    private String checkParentVersion(Parent parent) {
         String currentVersion = parent.getVersion();
         String latestVersion = getLatestParentVersion(parent);
 
-        if (latestVersion != null && !Objects.equals(latestVersion, currentVersion)) {
-            StringBuilder report = new StringBuilder();
-            report.append(renderer.renderHeader3("👪 Version obsolète du parent détectée"));
-            report.append(renderer.openIndentedSection());
-
-            report.append(renderer.renderWarning("Le fichier `pom.xml` utilise une version du parent qui n'est pas la plus récente disponible."));
-
-            String[] headers = {"🏷️ Group ID", "📘 Artifact ID", "🕒 Version actuelle", "🚀 Dernière version stable"};
-            String[][] rows = {{parent.getGroupId(), parent.getArtifactId(), currentVersion, latestVersion}};
-            report.append(renderer.renderTable(headers, rows));
-            report.append(renderer.renderParagraph("💡 Pensez à mettre à jour la version du parent pour bénéficier des dernières améliorations."));
-
-            report.append(renderer.closeIndentedSection());
-            return report.toString();
+        if (latestVersion == null) {
+            log.warn("Impossible de déterminer la dernière version pour le parent: "
+                    + parent.getGroupId() + ":" + parent.getArtifactId());
+            return "";
         }
 
-        return ""; // Version actuelle à jour
+        if (!Objects.equals(latestVersion, currentVersion)) {
+            return renderOutdatedParentWarning(parent, currentVersion, latestVersion);
+        }
+
+        log.info("Version du parent à jour: " + parent.getGroupId() + ":"
+                + parent.getArtifactId() + ":" + currentVersion);
+        return "";
     }
 
-    public String getLatestParentVersion(Parent parent) {
+    private String renderOutdatedParentWarning(Parent parent, String currentVersion, String latestVersion) {
+        StringBuilder report = new StringBuilder();
+        report.append(renderer.renderHeader3("👪 Version obsolète du parent détectée"));
+        report.append(renderer.openIndentedSection());
+
+        report.append(renderer.renderWarning("Le parent déclaré n'utilise pas la dernière version disponible."));
+
+        String[] headers = {"Group ID", "Artifact ID", "Version actuelle", "Dernière version stable"};
+        String[][] rows = {{parent.getGroupId(), parent.getArtifactId(), currentVersion, latestVersion}};
+        report.append(renderer.renderTable(headers, rows));
+
+        report.append(renderer.renderParagraph("💡 Mettez à jour la version du parent pour bénéficier des dernières améliorations."));
+        report.append(renderer.closeIndentedSection());
+
+        return report.toString();
+    }
+
+    private String getLatestParentVersion(Parent parent) {
         try {
             DefaultArtifact artifact = new DefaultArtifact(
                     parent.getGroupId(),
                     parent.getArtifactId(),
-                    "pom",
+                    POM_EXTENSION,
                     "[" + parent.getVersion() + ",)"
             );
 
@@ -122,14 +150,15 @@ public class ParentVersionChecker implements CustomChecker, InitializableChecker
             VersionRangeResult result = repoSystem.resolveVersionRange(session, request);
 
             return result.getVersions().stream()
+                    .filter(Objects::nonNull)
                     .filter(v -> !v.toString().contains("SNAPSHOT"))
                     .max(Comparator.naturalOrder())
                     .map(Version::toString)
                     .orElse(null);
 
         } catch (Exception e) {
-            log.warn("Impossible de récupérer la dernière version pour le parent : " +
-                    parent.getGroupId() + ":" + parent.getArtifactId(), e);
+            log.warn("Impossible de récupérer la dernière version pour le parent: "
+                    + parent.getGroupId() + ":" + parent.getArtifactId(), e);
             return null;
         }
     }

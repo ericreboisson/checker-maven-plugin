@@ -5,20 +5,25 @@ import org.elitost.maven.plugins.CheckerContext;
 import org.elitost.maven.plugins.renderers.ReportRenderer;
 import org.apache.maven.plugin.logging.Log;
 import org.apache.maven.project.MavenProject;
+
 import java.io.File;
 import java.nio.file.Files;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
- * Analyseur de propriétés redondantes dans un fichier pom.xml :
- * Détecte les propriétés définies dans un module, mais jamais utilisées dans aucun pom du projet.
+ * Analyseur de propriétés redondantes dans un fichier pom.xml.
+ * Détecte les propriétés définies dans un module mais jamais utilisées dans aucun pom du projet.
  */
 public class RedundantPropertiesChecker implements CustomChecker, BasicInitializableChecker {
+
+    private static final String CHECKER_ID = "redundantProperties";
+    private static final String LOG_PREFIX = "[RedundantPropertiesChecker]";
+    private static final String PROPERTY_REF_FORMAT = "${%s}";
 
     private Log log;
     private ReportRenderer renderer;
 
-    /** Constructeur requis pour le chargement SPI */
     public RedundantPropertiesChecker() {
         // Constructeur sans argument requis pour SPI
     }
@@ -31,46 +36,43 @@ public class RedundantPropertiesChecker implements CustomChecker, BasicInitializ
 
     @Override
     public String getId() {
-        return "redundantProperties";
+        return CHECKER_ID;
     }
 
-    /**
-     * Génère un rapport listant les propriétés définies dans ce module, mais non utilisées dans le projet.
-     *
-     * @param checkerContext Le projet Maven (racine ou module) à analyser.
-     * @return Rapport formaté (Markdown, HTML...) ou chaîne vide si tout est utilisé.
-     */
     @Override
     public String generateReport(CheckerContext checkerContext) {
-        String artifactId = checkerContext.getCurrentModule().getArtifactId();
-        Properties definedProperties = Optional.ofNullable(checkerContext.getCurrentModule().getOriginalModel())
-                .map(Model::getProperties)
-                .orElse(new Properties());
+        try {
+            MavenProject currentModule = checkerContext.getCurrentModule();
+            String artifactId = currentModule.getArtifactId();
 
-        if (definedProperties.isEmpty()) {
-            log.debug("[RedundantPropertiesChecker] Aucune propriété définie dans " + artifactId);
-            return "";
-        }
-
-        List<File> pomFiles = collectAllPomFiles(checkerContext.getCurrentModule());
-        String combinedPomContent = readAllPomContents(pomFiles);
-
-        List<String[]> unusedProperties = new ArrayList<>();
-
-        for (String property : definedProperties.stringPropertyNames()) {
-            String propertyReference = "${" + property.trim() + "}";
-            if (!combinedPomContent.contains(propertyReference)) {
-                log.warn("⚠️ [RedundantPropertiesChecker] Propriété non utilisée : " + property + " (définie dans " + artifactId + ")");
-                unusedProperties.add(new String[]{property}); // ⬅️ ici, plus de backticks
+            Set<String> definedProperties = getDefinedProperties(currentModule);
+            if (definedProperties.isEmpty()) {
+                log.debug(LOG_PREFIX + " Aucune propriété définie dans " + artifactId);
+                return "";
             }
-        }
 
-        if (unusedProperties.isEmpty()) {
-            log.info("[RedundantPropertiesChecker] Toutes les propriétés sont utilisées dans " + artifactId);
-            return "";
-        }
+            String combinedPomContent = getCombinedPomContent(currentModule);
+            List<String> unusedProperties = findUnusedProperties(definedProperties, combinedPomContent, artifactId);
 
-        return renderReport(artifactId, unusedProperties);
+            return buildReport(artifactId, unusedProperties);
+        } catch (Exception e) {
+            log.error(LOG_PREFIX + " Exception levée", e);
+            return renderer.renderError("❌ Erreur lors de l'analyse des propriétés redondantes: " + e.getMessage());
+        }
+    }
+
+    private Set<String> getDefinedProperties(MavenProject project) {
+        return Optional.ofNullable(project.getOriginalModel())
+                .map(Model::getProperties)
+                .map(Properties::stringPropertyNames)
+                .orElse(Collections.emptySet());
+    }
+
+    private String getCombinedPomContent(MavenProject project) {
+        return collectAllPomFiles(project).stream()
+                .map(this::readPomContent)
+                .filter(Objects::nonNull)
+                .collect(Collectors.joining("\n"));
     }
 
     private List<File> collectAllPomFiles(MavenProject project) {
@@ -80,42 +82,55 @@ public class RedundantPropertiesChecker implements CustomChecker, BasicInitializ
     }
 
     private void collectPomFilesRecursive(MavenProject project, List<File> pomFiles) {
-        File pom = project.getFile();
-        if (pom != null && pom.exists()) {
-            pomFiles.add(pom);
-        }
+        Optional.ofNullable(project.getFile())
+                .filter(File::exists)
+                .ifPresent(pomFiles::add);
 
-        List<MavenProject> children = project.getCollectedProjects();
-        if (children != null) {
-            for (MavenProject child : children) {
-                collectPomFilesRecursive(child, pomFiles);
-            }
+        Optional.ofNullable(project.getCollectedProjects())
+                .ifPresent(children -> children.forEach(child -> collectPomFilesRecursive(child, pomFiles)));
+    }
+
+    private String readPomContent(File pomFile) {
+        try {
+            return Files.readString(pomFile.toPath());
+        } catch (Exception e) {
+            log.warn(LOG_PREFIX + " Impossible de lire le fichier: " + pomFile.getAbsolutePath(), e);
+            return null;
         }
     }
 
-    private String readAllPomContents(List<File> pomFiles) {
-        StringBuilder content = new StringBuilder();
-
-        for (File pom : pomFiles) {
-            try {
-                content.append(Files.readString(pom.toPath())).append('\n');
-            } catch (Exception e) {
-                log.warn("⚠️ [RedundantPropertiesChecker] Impossible de lire le fichier : " + pom.getAbsolutePath(), e);
-            }
-        }
-
-        return content.toString();
+    private List<String> findUnusedProperties(Set<String> definedProperties, String pomContent, String artifactId) {
+        return definedProperties.stream()
+                .filter(property -> !isPropertyUsed(property, pomContent))
+                .peek(property -> log.warn(String.format(
+                        "⚠️ %s Propriété non utilisée: %s (définie dans %s)",
+                        LOG_PREFIX, property, artifactId
+                )))
+                .collect(Collectors.toList());
     }
 
-    private String renderReport(String artifactId, List<String[]> unusedProperties) {
+    private boolean isPropertyUsed(String property, String pomContent) {
+        return pomContent.contains(String.format(PROPERTY_REF_FORMAT, property.trim()));
+    }
+
+    private String buildReport(String artifactId, List<String> unusedProperties) {
+        if (unusedProperties.isEmpty()) {
+            log.info(LOG_PREFIX + " Toutes les propriétés sont utilisées dans " + artifactId);
+            return "";
+        }
+
         StringBuilder report = new StringBuilder();
         report.append(renderer.renderHeader3("🧹 Propriétés Redondantes dans `" + artifactId + "`"));
         report.append(renderer.openIndentedSection());
-
-        report.append(renderer.renderParagraph(
-                "Les propriétés suivantes sont définies dans ce module mais ne sont référencées dans aucun `pom.xml` du projet :"
+        report.append(renderer.renderWarning(
+                "Les propriétés suivantes sont définies dans ce module mais ne sont référencées dans aucun pom.xml du projet:"
         ));
-        report.append(renderer.renderTable(new String[]{"Nom de la propriété"}, unusedProperties.toArray(new String[0][])));
+
+        String[][] tableData = unusedProperties.stream()
+                .map(property -> new String[]{property})
+                .toArray(String[][]::new);
+
+        report.append(renderer.renderTable(new String[]{"Nom de la propriété"}, tableData));
         report.append(renderer.closeIndentedSection());
 
         return report.toString();

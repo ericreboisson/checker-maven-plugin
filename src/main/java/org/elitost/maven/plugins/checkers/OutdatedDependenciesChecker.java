@@ -12,14 +12,15 @@ import org.eclipse.aether.resolution.VersionRangeRequest;
 import org.eclipse.aether.resolution.VersionRangeResult;
 import org.eclipse.aether.version.Version;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
-/**
- * Vérifie les dépendances Maven déclarées dans un projet et génère un rapport des versions obsolètes.
- */
-public class OutdatedDependenciesChecker implements CustomChecker, InitializableChecker {
+public class OutdatedDependenciesChecker implements CustomChecker, InitializableChecker, AutoCloseable {
+
+    private static final int DEFAULT_TIMEOUT = 30;
+    private static final String DEFAULT_IGNORE_SCOPES = "system,test,provided";
 
     private Log log;
     private RepositorySystem repoSystem;
@@ -27,8 +28,19 @@ public class OutdatedDependenciesChecker implements CustomChecker, Initializable
     private List<RemoteRepository> remoteRepositories;
     private ReportRenderer renderer;
 
+    private boolean skip;
+    private Set<String> ignoreScopes;
+    private Pattern ignoreGroupsPattern;
+    private int timeoutSeconds;
+    private boolean showAll;
+    private ExecutorService executorService;
+
     public OutdatedDependenciesChecker() {
-        // Constructeur vide pour instanciation via SPI
+        this.skip = false;
+        this.ignoreScopes = new HashSet<>(Arrays.asList(DEFAULT_IGNORE_SCOPES.split(",")));
+        this.ignoreGroupsPattern = null;
+        this.timeoutSeconds = DEFAULT_TIMEOUT;
+        this.showAll = false;
     }
 
     @Override
@@ -42,6 +54,27 @@ public class OutdatedDependenciesChecker implements CustomChecker, Initializable
         this.session = session;
         this.remoteRepositories = remoteRepositories;
         this.renderer = renderer;
+        this.executorService = Executors.newWorkStealingPool();
+    }
+
+    public void configure(Map<String, String> properties) {
+        if (properties.containsKey("outdatedDependencies.skip")) {
+            this.skip = Boolean.parseBoolean(properties.get("outdatedDependencies.skip"));
+        }
+        if (properties.containsKey("outdatedDependencies.ignoreScopes")) {
+            this.ignoreScopes = Arrays.stream(properties.get("outdatedDependencies.ignoreScopes").split(","))
+                    .map(String::trim)
+                    .collect(Collectors.toSet());
+        }
+        if (properties.containsKey("outdatedDependencies.ignoreGroups")) {
+            this.ignoreGroupsPattern = Pattern.compile(properties.get("outdatedDependencies.ignoreGroups"));
+        }
+        if (properties.containsKey("outdatedDependencies.timeout")) {
+            this.timeoutSeconds = Integer.parseInt(properties.get("outdatedDependencies.timeout"));
+        }
+        if (properties.containsKey("outdatedDependencies.showAll")) {
+            this.showAll = Boolean.parseBoolean(properties.get("outdatedDependencies.showAll"));
+        }
     }
 
     @Override
@@ -51,69 +84,210 @@ public class OutdatedDependenciesChecker implements CustomChecker, Initializable
 
     @Override
     public String generateReport(CheckerContext checkerContext) {
+        if (skip) {
+            log.info("[OutdatedDependenciesChecker] Checker désactivé par configuration");
+            return "";
+        }
+
+        List<Dependency> dependencies = Optional.ofNullable(checkerContext.getCurrentModule())
+                .map(project -> project.getOriginalModel())
+                .map(model -> model.getDependencies())
+                .orElse(Collections.emptyList());
+
+        if (dependencies.isEmpty()) {
+            log.info("Aucune dépendance à vérifier.");
+            return "";
+        }
+
+        List<DependencyInfo> results = checkDependenciesConcurrently(dependencies);
+        return buildReport(results);
+    }
+
+    private List<DependencyInfo> checkDependenciesConcurrently(List<Dependency> dependencies) {
+        List<Future<DependencyInfo>> futures = dependencies.stream()
+                .filter(this::shouldCheckDependency)
+                .map(dep -> executorService.submit(() -> checkDependencyVersion(dep)))
+                .collect(Collectors.toList());
+
+        return collectResults(futures);
+    }
+
+    private boolean shouldCheckDependency(Dependency dep) {
+        if (dep.getVersion() == null || dep.getVersion().trim().isEmpty()) {
+            return false;
+        }
+        if (dep.getVersion().startsWith("${")) {
+            log.debug("Version dynamique ignorée: " + dep.getManagementKey());
+            return false;
+        }
+        if (dep.getScope() != null && ignoreScopes.contains(dep.getScope())) {
+            return false;
+        }
+        if (ignoreGroupsPattern != null && ignoreGroupsPattern.matcher(dep.getGroupId()).matches()) {
+            return false;
+        }
+        return true;
+    }
+
+    private DependencyInfo checkDependencyVersion(Dependency dep) {
+        try {
+            VersionRangeRequest rangeRequest = new VersionRangeRequest();
+            rangeRequest.setArtifact(new DefaultArtifact(
+                    dep.getGroupId(),
+                    dep.getArtifactId(),
+                    "jar",
+                    "[" + dep.getVersion() + ",)"
+            ));
+            rangeRequest.setRepositories(remoteRepositories);
+
+            VersionRangeResult result = repoSystem.resolveVersionRange(session, rangeRequest);
+
+            return new DependencyInfo(
+                    dep.getGroupId(),
+                    dep.getArtifactId(),
+                    dep.getVersion(),
+                    findLatestStableVersion(result.getVersions()),
+                    findLatestVersion(result.getVersions())
+            );
+        } catch (Exception e) {
+            log.warn(String.format("Erreur vérification %s:%s:%s - %s",
+                    dep.getGroupId(),
+                    dep.getArtifactId(),
+                    dep.getVersion(),
+                    e.getMessage()));
+            return new DependencyInfo(
+                    dep.getGroupId(),
+                    dep.getArtifactId(),
+                    dep.getVersion(),
+                    null,
+                    null
+            );
+        }
+    }
+
+    private String findLatestStableVersion(Collection<Version> versions) {
+        return Optional.ofNullable(versions)
+                .map(v -> v.stream()
+                        .filter(ver -> ver != null && !ver.toString().toUpperCase().contains("SNAPSHOT"))
+                        .max(Comparator.naturalOrder())
+                        .map(Version::toString)
+                        .orElse(null))
+                .orElse(null);
+    }
+
+    private String findLatestVersion(Collection<Version> versions) {
+        return Optional.ofNullable(versions)
+                .map(v -> v.stream()
+                        .filter(Objects::nonNull)
+                        .max(Comparator.naturalOrder())
+                        .map(Version::toString)
+                        .orElse(null))
+                .orElse(null);
+    }
+
+    private List<DependencyInfo> collectResults(List<Future<DependencyInfo>> futures) {
+        return futures.stream()
+                .map(f -> {
+                    try {
+                        return f.get(timeoutSeconds, TimeUnit.SECONDS);
+                    } catch (TimeoutException e) {
+                        log.warn("Timeout lors de la vérification d'une dépendance");
+                        return null;
+                    } catch (Exception e) {
+                        log.warn("Erreur lors du traitement d'une dépendance", e);
+                        return null;
+                    }
+                })
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+    }
+
+    private String buildReport(List<DependencyInfo> results) {
+        List<DependencyInfo> outdated = results.stream()
+                .filter(info -> info.latestStable != null && !info.latestStable.equals(info.currentVersion))
+                .sorted(Comparator.comparing(DependencyInfo::getGroupId))
+                .collect(Collectors.toList());
+
+        List<DependencyInfo> upToDate = showAll ?
+                results.stream()
+                        .filter(info -> info.latestStable != null && info.latestStable.equals(info.currentVersion))
+                        .sorted(Comparator.comparing(DependencyInfo::getGroupId))
+                        .collect(Collectors.toList()) :
+                Collections.emptyList();
+
+        if (outdated.isEmpty() && upToDate.isEmpty()) {
+            return "";
+        }
+
         StringBuilder report = new StringBuilder();
-        List<String[]> outdated = checkForUpdates(checkerContext.getCurrentModule().getOriginalModel().getDependencies());
+        report.append(renderer.renderHeader3("📦 Rapport des dépendances obsolètes"));
+        report.append(renderer.openIndentedSection());
 
         if (!outdated.isEmpty()) {
-            report.append(renderer.renderHeader3("📦 Dépendances obsolètes détectées"));
-            report.append(renderer.openIndentedSection());
-
             report.append(renderer.renderWarning(
-                    "Certaines dépendances ont une version plus récente disponible dans les dépôts Maven. " +
-                            "Il est recommandé de les mettre à jour pour bénéficier des dernières corrections de bugs, " +
-                            "améliorations et correctifs de sécurité."));
+                    String.format("%d dépendance(s) obsolète(s) trouvée(s):", outdated.size())));
 
-            String[] headers = {"🏷️ Group ID", "📘 Artifact ID", "🕒 Version actuelle", "🚀 Dernière version stable"};
-            report.append(renderer.renderTable(headers, outdated.toArray(new String[0][])));
+            String[] headers = {"Group ID", "Artifact ID", "Version actuelle", "Dernière stable"};
+            String[][] rows = outdated.stream()
+                    .map(info -> new String[]{
+                            info.groupId,
+                            info.artifactId,
+                            info.currentVersion,
+                            info.latestStable // Affichage simple sans formatage spécial
+                    })
+                    .toArray(String[][]::new);
 
-            report.append(renderer.renderParagraph("💡 Pensez à tester les mises à jour avant de les intégrer définitivement."));
-            report.append(renderer.closeIndentedSection());
-        } else {
-            log.info("✅ Aucune dépendance obsolète détectée.");
+            report.append(renderer.renderTable(headers, rows));
         }
+
+        if (!upToDate.isEmpty()) {
+            report.append(renderer.renderInfo(
+                    String.format("\n%d dépendance(s) à jour:", upToDate.size())));
+
+            String[] headers = {"Group ID", "Artifact ID", "Version"};
+            String[][] rows = upToDate.stream()
+                    .map(info -> new String[]{
+                            info.groupId,
+                            info.artifactId,
+                            info.currentVersion
+                    })
+                    .toArray(String[][]::new);
+
+            report.append(renderer.renderTable(headers, rows));
+        }
+
+        report.append(renderer.renderParagraph(
+                "💡 Conseil: Vérifiez la compatibilité avant de mettre à jour les dépendances."));
+        report.append(renderer.closeIndentedSection());
 
         return report.toString();
     }
 
-    private List<String[]> checkForUpdates(List<Dependency> dependencies) {
-        List<String[]> outdatedDeps = new ArrayList<>();
-
-        for (Dependency dep : dependencies) {
-            String groupId = dep.getGroupId();
-            String artifactId = dep.getArtifactId();
-            String currentVersion = dep.getVersion();
-
-            if (currentVersion == null || currentVersion.startsWith("${")) {
-                log.debug("⏭️ Dépendance ignorée (version dynamique ou null) : " + groupId + ":" + artifactId);
-                continue;
-            }
-
-            try {
-                VersionRangeRequest rangeRequest = createVersionRangeRequest(groupId, artifactId, currentVersion);
-                VersionRangeResult result = repoSystem.resolveVersionRange(session, rangeRequest);
-
-                Version latestStable = result.getVersions().stream()
-                        .filter(v -> !v.toString().contains("SNAPSHOT"))
-                        .max(Comparator.naturalOrder())
-                        .orElse(null);
-
-                if (latestStable != null && !latestStable.toString().equals(currentVersion)) {
-                    outdatedDeps.add(new String[]{groupId, artifactId, currentVersion, latestStable.toString()});
-                }
-
-            } catch (Exception e) {
-                log.warn(String.format("❌ Impossible de vérifier les mises à jour pour %s:%s", groupId, artifactId), e);
-            }
+    @Override
+    public void close() {
+        if (executorService != null) {
+            executorService.shutdownNow();
         }
-
-        return outdatedDeps;
     }
 
-    private VersionRangeRequest createVersionRangeRequest(String groupId, String artifactId, String currentVersion) {
-        DefaultArtifact artifact = new DefaultArtifact(groupId, artifactId, "jar", "[" + currentVersion + ",)");
-        VersionRangeRequest request = new VersionRangeRequest();
-        request.setArtifact(artifact);
-        request.setRepositories(remoteRepositories);
-        return request;
+    private static class DependencyInfo {
+        final String groupId;
+        final String artifactId;
+        final String currentVersion;
+        final String latestStable;
+        final String latest;
+
+        DependencyInfo(String groupId, String artifactId, String currentVersion,
+                       String latestStable, String latest) {
+            this.groupId = groupId;
+            this.artifactId = artifactId;
+            this.currentVersion = currentVersion;
+            this.latestStable = latestStable;
+            this.latest = latest;
+        }
+
+        String getGroupId() {
+            return groupId;
+        }
     }
 }

@@ -12,34 +12,33 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Vérifie que toutes les interfaces Java déclarées dans le module <code>-api</code>
  * sont bien référencées dans des tests via des appels à
  * <code>ClassInspector.logClassName(Foo.class)</code>.
  *
- * <p>
- * Ce checker vise à garantir que chaque interface exposée par l'API dispose d'une
- * validation explicite dans les tests unitaires ou d'intégration.
- * Cela permet notamment :
- * </p>
+ * <p>Configuration possible via properties Maven :</p>
  * <ul>
- *   <li>De s'assurer de la visibilité et du suivi des interfaces exposées</li>
- *   <li>De faciliter les outils d'analyse statique ou de génération de documentation</li>
- *   <li>De repérer les interfaces oubliées ou orphelines</li>
+ *   <li><code>interfaceConformity.skip</code> : désactive complètement le checker</li>
+ *   <li><code>interfaceConformity.includePattern</code> : pattern regex pour filtrer les interfaces à vérifier</li>
+ *   <li><code>interfaceConformity.excludePattern</code> : pattern regex pour exclure des interfaces de la vérification</li>
+ *   <li><code>interfaceConformity.inspectorMethod</code> : nom alternatif pour la méthode d'inspection</li>
  * </ul>
- *
- * <p>
- * Le rapport généré inclut un tableau listant les interfaces non couvertes par les appels à
- * <code>ClassInspector.logClassName(...)</code>.
- * </p>
- *
- * @author Eric
  */
 public class InterfaceConformityChecker implements CustomChecker, BasicInitializableChecker {
 
+    private static final String DEFAULT_INSPECTOR_METHOD = "ClassInspector.logClassName";
+    private static final Pattern LOG_CALL_PATTERN = Pattern.compile("([\\w]+)\\.logClassName\\(([^)]+)\\.class\\)");
+    private static final Pattern INTERFACE_PATTERN = Pattern.compile("\\binterface\\s+([\\w<]+)");
+
     private Log log;
     private ReportRenderer renderer;
+    private boolean skip;
+    private Pattern includePattern;
+    private Pattern excludePattern;
+    private String inspectorMethod;
 
     public InterfaceConformityChecker() {
         // Constructeur requis pour le chargement SPI
@@ -49,6 +48,26 @@ public class InterfaceConformityChecker implements CustomChecker, BasicInitializ
     public void init(Log log, ReportRenderer renderer) {
         this.log = log;
         this.renderer = renderer;
+        // Configuration par défaut
+        this.skip = false;
+        this.includePattern = null;
+        this.excludePattern = null;
+        this.inspectorMethod = DEFAULT_INSPECTOR_METHOD;
+    }
+
+    public void configure(Map<String, String> properties) {
+        if (properties.containsKey("interfaceConformity.skip")) {
+            this.skip = Boolean.parseBoolean(properties.get("interfaceConformity.skip"));
+        }
+        if (properties.containsKey("interfaceConformity.includePattern")) {
+            this.includePattern = Pattern.compile(properties.get("interfaceConformity.includePattern"));
+        }
+        if (properties.containsKey("interfaceConformity.excludePattern")) {
+            this.excludePattern = Pattern.compile(properties.get("interfaceConformity.excludePattern"));
+        }
+        if (properties.containsKey("interfaceConformity.inspectorMethod")) {
+            this.inspectorMethod = properties.get("interfaceConformity.inspectorMethod");
+        }
     }
 
     @Override
@@ -56,57 +75,78 @@ public class InterfaceConformityChecker implements CustomChecker, BasicInitializ
         return "interfaceConformity";
     }
 
-    /**
-     * Génère un rapport listant les interfaces Java non référencées dans des appels
-     * à <code>ClassInspector.logClassName(...)</code> dans les tests.
-     *
-     * @param checkerContext  Projet Maven contenant les interfaces (généralement le module <code>-api</code>)
-     * @return Chaîne représentant le rapport complet formaté via le {@link ReportRenderer}
-     */
     @Override
     public String generateReport(CheckerContext checkerContext) {
-        String artifactId = checkerContext.getCurrentModule().getArtifactId();
+        if (skip) {
+            log.info("[InterfaceConformityChecker] Checker désactivé par configuration");
+            return "";
+        }
 
-        List<String> interfaceNames = collectInterfaceNames(new File(checkerContext.getCurrentModule().getBasedir(), "src/main/java"));
+        MavenProject currentModule = checkerContext.getCurrentModule();
+        String artifactId = currentModule.getArtifactId();
+
+        List<String> interfaceNames = collectInterfaceNames(new File(currentModule.getBasedir(), "src/main/java"));
         if (interfaceNames.isEmpty()) {
             log.info("[InterfaceConformityChecker] Aucune interface détectée dans " + artifactId);
-            return ""; // ✅ Rien à signaler
+            return "";
         }
 
         Set<String> loggedInterfaces = findLoggedInterfaces(checkerContext.getRootProject());
 
         List<String[]> uncovered = interfaceNames.stream()
+                .filter(this::shouldCheckInterface)
                 .filter(iface -> !loggedInterfaces.contains(iface))
+                .sorted()
                 .map(name -> new String[]{name})
                 .collect(Collectors.toList());
 
         if (uncovered.isEmpty()) {
             log.info("[InterfaceConformityChecker] Toutes les interfaces de " + artifactId + " sont couvertes.");
-            return ""; // ✅ Tout est OK → pas de rapport
+            return "";
         }
 
+        return generateUncoveredInterfacesReport(artifactId, uncovered);
+    }
+
+    private boolean shouldCheckInterface(String interfaceName) {
+        if (includePattern != null && !includePattern.matcher(interfaceName).matches()) {
+            return false;
+        }
+        if (excludePattern != null && excludePattern.matcher(interfaceName).matches()) {
+            return false;
+        }
+        return true;
+    }
+
+    private String generateUncoveredInterfacesReport(String artifactId, List<String[]> uncovered) {
         StringBuilder report = new StringBuilder();
         report.append(renderer.renderHeader3("🧪 Conformité des interfaces de `" + artifactId + "`"));
         report.append(renderer.openIndentedSection());
-        report.append(renderer.renderWarning("Interfaces non testées par `ClassInspector.logClassName(...)` :"));
-        report.append(renderer.renderTable(new String[]{"Interface non testée"}, uncovered.toArray(new String[0][])));
-        report.append(renderer.closeIndentedSection());
 
+        report.append(renderer.renderWarning(String.format(
+                "%d interfaces non référencées par `%s(...)` :",
+                uncovered.size(),
+                inspectorMethod)));
+
+        report.append(renderer.renderTable(
+                new String[]{"Interface non testée"},
+                uncovered.toArray(new String[0][])));
+
+        report.append(renderer.renderParagraph("💡 Conseil : ajoutez des appels à " + inspectorMethod +
+                " dans vos tests pour chaque interface exposée."));
+
+        report.append(renderer.closeIndentedSection());
         return report.toString();
     }
 
-    /**
-     * Scanne les fichiers sources du module pour extraire les noms des interfaces Java.
-     *
-     * @param sourceDir Répertoire racine des sources (src/main/java)
-     * @return Liste des noms simples des interfaces trouvées (sans package)
-     */
     private List<String> collectInterfaceNames(File sourceDir) {
-        if (!sourceDir.exists()) return Collections.emptyList();
+        if (!sourceDir.exists()) {
+            return Collections.emptyList();
+        }
 
-        try {
-            return Files.walk(sourceDir.toPath())
-                    .filter(path -> path.toString().endsWith(".java"))
+        try (Stream<Path> paths = Files.walk(sourceDir.toPath())) {
+            return paths.filter(path -> path.toString().endsWith(".java"))
+                    .parallel()
                     .map(this::extractInterfaceName)
                     .filter(Objects::nonNull)
                     .collect(Collectors.toList());
@@ -116,25 +156,12 @@ public class InterfaceConformityChecker implements CustomChecker, BasicInitializ
         }
     }
 
-    /**
-     * Extrait le nom simple d’une interface à partir d’un fichier .java.
-     *
-     * @param file Fichier source Java
-     * @return Nom de l’interface (ex : "FooApi"), ou null si aucune interface trouvée
-     */
     private String extractInterfaceName(Path file) {
         try {
-            List<String> lines = Files.readAllLines(file);
-            for (String line : lines) {
-                line = line.trim();
-                if (line.contains("interface ")) {
-                    String[] tokens = line.split("\\s+");
-                    for (int i = 0; i < tokens.length - 1; i++) {
-                        if ("interface".equals(tokens[i])) {
-                            return tokens[i + 1].replaceAll("[<{].*", ""); // supprime les génériques
-                        }
-                    }
-                }
+            String content = Files.readString(file);
+            Matcher matcher = INTERFACE_PATTERN.matcher(content);
+            if (matcher.find()) {
+                return matcher.group(1).replaceAll("[<{].*", "");
             }
         } catch (IOException e) {
             log.warn("⚠️ Lecture impossible : " + file);
@@ -142,25 +169,17 @@ public class InterfaceConformityChecker implements CustomChecker, BasicInitializ
         return null;
     }
 
-    /**
-     * Recherche dans tous les modules Maven les appels à {@code ClassInspector.logClassName(...)} dans les tests.
-     *
-     * @param rootProject Projet parent contenant tous les modules
-     * @return Ensemble des noms d’interfaces référencés dans les tests
-     */
     private Set<String> findLoggedInterfaces(MavenProject rootProject) {
         Set<String> found = new HashSet<>();
+        List<MavenProject> modules = Optional.ofNullable(rootProject.getCollectedProjects())
+                .orElse(Collections.emptyList());
 
-        List<MavenProject> modules = rootProject.getCollectedProjects();
-        if (modules == null) return found;
-
-        for (MavenProject module : modules) {
+        modules.parallelStream().forEach(module -> {
             File testDir = new File(module.getBasedir(), "src/test/java");
-            if (!testDir.exists()) continue;
+            if (!testDir.exists()) return;
 
-            try {
-                Files.walk(testDir.toPath())
-                        .filter(p -> p.toString().endsWith(".java"))
+            try (Stream<Path> paths = Files.walk(testDir.toPath())) {
+                paths.filter(p -> p.toString().endsWith(".java"))
                         .forEach(file -> {
                             try {
                                 String content = Files.readString(file);
@@ -172,23 +191,19 @@ public class InterfaceConformityChecker implements CustomChecker, BasicInitializ
             } catch (IOException e) {
                 log.warn("Erreur lors du parcours de " + module.getArtifactId(), e);
             }
-        }
+        });
 
         return found;
     }
 
-    /**
-     * Recherche les appels à {@code ClassInspector.logClassName(Foo.class)} dans le contenu d’un fichier Java.
-     *
-     * @param content contenu brut du fichier source
-     * @return Liste des noms d’interfaces passés à la méthode logClassName(...)
-     */
     private List<String> extractLogClassNameCalls(String content) {
         List<String> results = new ArrayList<>();
-        Pattern pattern = Pattern.compile("ClassInspector\\.logClassName\\(([^)]+)\\.class\\)");
-        Matcher matcher = pattern.matcher(content);
+        Matcher matcher = LOG_CALL_PATTERN.matcher(content);
+
         while (matcher.find()) {
-            results.add(matcher.group(1).trim());
+            if (matcher.group(1).equals(inspectorMethod.split("\\.")[0])) {
+                results.add(matcher.group(2).trim());
+            }
         }
         return results;
     }

@@ -2,6 +2,7 @@ package org.elitost.maven.plugins;
 
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
+import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugin.logging.Log;
 import org.apache.maven.plugins.annotations.*;
 import org.apache.maven.project.MavenProject;
@@ -12,319 +13,413 @@ import org.elitost.maven.plugins.checkers.BasicInitializableChecker;
 import org.elitost.maven.plugins.checkers.CustomChecker;
 import org.elitost.maven.plugins.checkers.InitializableChecker;
 import org.elitost.maven.plugins.factory.ReportRendererFactory;
-import org.elitost.maven.plugins.renderers.*;
+import org.elitost.maven.plugins.renderers.ReportRenderer;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.text.SimpleDateFormat;
 import java.util.*;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 /**
- * Plugin Maven de vérification modulaire destiné à analyser la structure d’un projet multi-modules.
- * Ce plugin exécute dynamiquement une série de checkers chargés via SPI, afin de détecter des problèmes courants dans les fichiers pom.xml, les dépendances, etc.
- * Fonctionnalités :
- * - Découverte dynamique des checkers via SPI
- * - Sélection des checkers via -DcheckersToRun=...
- * - Support multi-format de rendu (HTML, Markdown, Texte)
- * - Analyse récursive de tous les modules déclarés dans le projet parent
+ * Plugin Maven de vérification modulaire avec analyse avancée des projets multi-modules.
  */
-@Mojo(name = "check", defaultPhase = LifecyclePhase.NONE)
-@Execute(goal = "check")
+@Mojo(name = "check", defaultPhase = LifecyclePhase.VERIFY, threadSafe = true)
 public class ModuleCheckerMojo extends AbstractMojo {
 
-    /** Format de sortie du rapport (html, markdown, text). */
-    @Parameter(property = "format", defaultValue = "html")
-    private List<String> format;
+    private static final Set<String> SUPPORTED_FORMATS = Set.of("html", "markdown", "md", "text");
+    private static final Set<String> TOP_LEVEL_ONLY_CHECKERS = Set.of("expectedModules", "propertyPresence");
+    private static final String DEFAULT_CSS = "body { font-family: Arial, sans-serif; margin: 0; padding: 20px; line-height: 1.6; }\n" +
+            "h1 { color: #2c3e50; }\n" +
+            "h2 { color: #3498db; margin-top: 30px; border-bottom: 1px solid #eee; padding-bottom: 10px; }\n" +
+            "h3 { color: #2980b9; }\n" +
+            ".success { color: #27ae60; font-weight: bold; }\n" +
+            ".warning { color: #f39c12; font-weight: bold; }\n" +
+            ".error { color: #e74c3c; font-weight: bold; }\n" +
+            "footer { margin-top: 30px; font-size: 0.8em; color: #7f8c8d; text-align: center; }";
 
-    /** Liste d'identifiants de checkers à exécuter. */
+    @Parameter(property = "format", defaultValue = "html")
+    private List<String> formats;
+
     @Parameter(property = "checkersToRun")
     private List<String> checkersToRun;
 
-    /** Session Aether pour la résolution des dépendances. */
+    @Parameter(property = "propertiesToCheck")
+    private List<String> propertiesToCheck;
+
+    @Parameter(property = "failOnError", defaultValue = "false")
+    private boolean failOnError;
+
+    @Parameter(property = "reportFileName", defaultValue = "module-check-report")
+    private String reportFileName;
+
+    @Parameter(property = "reportOutputDirectory", defaultValue = "${project.build.directory}/checker-reports")
+    private File reportOutputDirectory;
+
+    @Parameter(property = "checkerTimeout", defaultValue = "30")
+    private int checkerTimeout;
+
     @Parameter(defaultValue = "${repositorySystemSession}", readonly = true)
     private RepositorySystemSession repoSession;
 
-    /** Composant Aether injecté. */
     @Component
     private RepositorySystem repoSystem;
 
-    /** Dépôts distants pour la résolution. */
     @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true)
     private List<RemoteRepository> remoteRepositories;
 
-    /** Projet Maven courant (parent). */
-    @Parameter(defaultValue = "${project}")
+    @Parameter(defaultValue = "${project}", readonly = true)
     private MavenProject project;
 
-    /** Propriétés Maven à vérifier, issues du système. */
-    @Parameter
-    private List<String> propertiesToCheck;
+    @Parameter(property = "excludeModules")
+    private List<String> excludeModules;
 
-    private final List<CustomChecker> checkers = new ArrayList<>();
+    @Parameter(property = "verbose", defaultValue = "false")
+    private boolean verbose;
+
+    private final List<CustomChecker> checkers = new CopyOnWriteArrayList<>();
+    private final AtomicInteger errorCount = new AtomicInteger(0);
     private Log log;
-    private boolean runAll;
+    private boolean runAllCheckers;
 
-    /**
-     * Point d'entrée principal du plugin.
-     * @throws MojoExecutionException en cas d'erreur bloquante
-     */
     @Override
-    public void execute() throws MojoExecutionException {
+    public void execute() throws MojoExecutionException, MojoFailureException {
         this.log = getLog();
 
-        if (!isParentPom()) {
-            log.info("🔍 Ce n'est pas le pom parent, le plugin ne s'exécute pas ici.");
+        if (!isParentProject()) {
+            log.info("🔍 Skipping non-parent project");
             return;
         }
 
-        enrichPropertiesFromSystem();
-        initCheckers();
-        logAvailableCheckers();
-
-        runAll = checkersToRun == null || checkersToRun.isEmpty();
-
-        List<String> formatsToGenerate = (format != null && !format.isEmpty()) ? format : List.of("markdown");
-
-        for (String fmt : formatsToGenerate) {
-            ReportRenderer renderer = ReportRendererFactory.createRenderer(fmt);
-
-            // Réinitialise-les checkers avec le bon renderer pour ce format
-            reinitializeCheckersForRenderer(renderer);
-
-            StringBuilder content = generateFullReport(renderer);
-            writeReport(fmt, content.toString());
+        try {
+            initializePlugin();
+            validateParameters();
+            generateReports();
+            handleFailures();
+        } catch (MojoExecutionException | MojoFailureException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new MojoExecutionException("❌ Plugin execution failed: " + e.getMessage(), e);
         }
     }
 
-    private void reinitializeCheckersForRenderer(ReportRenderer renderer) {
-        for (CustomChecker checker : checkers) {
-            if (checker instanceof BasicInitializableChecker) {
-                ((BasicInitializableChecker) checker).init(log, renderer);
-            }
-            if (checker instanceof InitializableChecker) {
-                ((InitializableChecker) checker).init(log, repoSystem, repoSession, remoteRepositories, renderer);
-            }
-        }
-    }
-    private StringBuilder generateFullReport(ReportRenderer renderer) {
-        StringBuilder content = generateReportContent(project, renderer);
-        generateModuleReports(renderer, content);
-        return content;
+    private boolean isParentProject() {
+        return "pom".equals(project.getPackaging()) &&
+                project.getModules() != null &&
+                !project.getModules().isEmpty();
     }
 
-    /**
-     * Enrichit les propriétés à vérifier depuis la ligne de commande.
-     */
-    private void enrichPropertiesFromSystem() {
+    private void initializePlugin() throws MojoExecutionException {
+        loadSystemProperties();
+        createReportDirectory();
+        loadCheckers();
+        logConfiguration();
+        this.runAllCheckers = checkersToRun == null || checkersToRun.isEmpty();
+    }
+
+    private void loadSystemProperties() {
         if (propertiesToCheck == null) {
             propertiesToCheck = new ArrayList<>();
         }
-        String sysProp = System.getProperty("propertiesToCheck");
-        if (sysProp != null && !sysProp.trim().isEmpty()) {
-            propertiesToCheck.addAll(Arrays.asList(sysProp.split(",")));
-        } else {
-            log.warn("⚠️ Aucune propriété à vérifier n'a été fournie via -DpropertiesToCheck.");
+
+        String sysProps = System.getProperty("propertiesToCheck");
+        if (sysProps != null && !sysProps.trim().isEmpty()) {
+            propertiesToCheck.addAll(Arrays.asList(sysProps.split(",")));
+        }
+
+        if (propertiesToCheck.isEmpty()) {
+            log.warn("⚠️ No properties to check specified via -DpropertiesToCheck");
         }
     }
 
-    /**
-     * Charge dynamiquement les checkers via SPI et les initialise.
-     */
-    private void initCheckers() {
-        ServiceLoader<CustomChecker> serviceLoader = ServiceLoader.load(CustomChecker.class);
-        for (CustomChecker checker : serviceLoader) {
+    private void createReportDirectory() throws MojoExecutionException {
+        if (!reportOutputDirectory.exists() && !reportOutputDirectory.mkdirs()) {
+            throw new MojoExecutionException("❌ Failed to create report directory: " +
+                    reportOutputDirectory.getAbsolutePath());
+        }
+    }
+
+    private void loadCheckers() {
+        ServiceLoader.load(CustomChecker.class).forEach(checker -> {
             try {
                 checkers.add(checker);
             } catch (Exception e) {
-                log.error("❌ Erreur d'initialisation du checker : " + checker.getClass().getName(), e);
+                log.error("❌ Failed to load checker: " + checker.getClass().getName(), e);
             }
+        });
+
+        if (checkers.isEmpty()) {
+            log.warn("⚠️ No checkers found via SPI");
         }
     }
 
-    /**
-     * Affiche la liste des checkers disponibles et éventuellement ceux sélectionnés.
-     */
-    private void logAvailableCheckers() {
+    private void logConfiguration() {
+        log.info("📋 Plugin configuration:");
+        log.info("- Output formats: " + formats);
+        log.info("- Report directory: " + reportOutputDirectory.getAbsolutePath());
+
         List<String> checkerIds = checkers.stream()
                 .map(CustomChecker::getId)
                 .sorted()
                 .collect(Collectors.toList());
 
-        log.info("📦 Checkers disponibles : " + checkerIds);
+        log.info("📦 Available checkers: " + checkerIds);
 
-        if (checkersToRun != null) {
+        if (checkersToRun != null && !checkersToRun.isEmpty()) {
             List<String> invalidCheckers = checkersToRun.stream()
-                    .filter(checkerId -> !checkerIds.contains(checkerId))
+                    .filter(id -> !checkerIds.contains(id))
                     .collect(Collectors.toList());
 
             if (!invalidCheckers.isEmpty()) {
-                log.warn("❌ Checkers non valides spécifiés : " + String.join(", ", invalidCheckers));
+                log.warn("❌ Invalid checkers specified: " + String.join(", ", invalidCheckers));
             }
-        }
 
-        if (!runAll) {
-            log.info("✅ Checkers sélectionnés : " + checkersToRun);
+            log.info("✅ Selected checkers: " + checkersToRun);
+        } else {
+            log.info("✅ All checkers will be executed");
         }
     }
 
-    /**
-     * Génère le rapport pour un module donné.
-     * @param module le module Maven à analyser
-     * @param renderer le moteur de rendu utilisé
-     * @return contenu du rapport
-     */
-    private StringBuilder generateReportContent(MavenProject module, ReportRenderer renderer) {
-        CheckerContext context = new CheckerContext(module, project, propertiesToCheck);
-        StringBuilder content = new StringBuilder();
-        content.append(renderer.renderHeader2("Module : " + module.getArtifactId()));
+    private void validateParameters() throws MojoExecutionException {
+        if (checkerTimeout <= 0) {
+            throw new MojoExecutionException("checkerTimeout must be > 0");
+        }
+    }
 
-        ExecutorService executor = Executors.newWorkStealingPool();
+    private void generateReports() throws Exception {
+        for (String format : getValidFormats()) {
+            ReportRenderer renderer = ReportRendererFactory.createRenderer(format);
+            Map<MavenProject, String> reports = generateReportsForAllModules(renderer);
+            String fullReport = buildAggregateReport(reports, renderer);
+            writeReportFile(format, fullReport);
+        }
+    }
 
-        List<Future<String>> futures = new ArrayList<>();
-        for (CustomChecker checker : checkers) {
-            futures.add(executor.submit(() -> generateCheckerReport(checker, context)));
+    private List<String> getValidFormats() {
+        if (formats == null || formats.isEmpty()) {
+            return List.of("html");
         }
 
-        executor.shutdown();
+        List<String> validFormats = formats.stream()
+                .map(String::toLowerCase)
+                .filter(SUPPORTED_FORMATS::contains)
+                .map(f -> "md".equals(f) ? "markdown" : f)
+                .distinct()
+                .collect(Collectors.toList());
 
-        for (Future<String> future : futures) {
+        if (validFormats.isEmpty()) {
+            log.warn("⚠️ No valid formats specified. Using default: html");
+            return List.of("html");
+        }
+
+        return validFormats;
+    }
+
+    private Map<MavenProject, String> generateReportsForAllModules(ReportRenderer renderer) {
+        initializeCheckers(renderer);
+        Map<MavenProject, String> reports = new ConcurrentHashMap<>();
+
+        // Process parent first
+        reports.put(project, generateModuleReport(project, renderer, true));
+
+        // Process child modules in parallel
+        ForkJoinPool customPool = new ForkJoinPool(Runtime.getRuntime().availableProcessors());
+        try {
+            customPool.submit(() ->
+                    project.getCollectedProjects().parallelStream()
+                            .filter(this::shouldProcessModule)
+                            .forEach(module ->
+                                    reports.put(module, generateModuleReport(module, renderer, false))
+                            )
+            ).get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("❌ Module analysis interrupted", e);
+        } catch (ExecutionException e) {
+            log.error("❌ Error during module analysis", e);
+        } finally {
+            customPool.shutdown();
+        }
+
+        return reports;
+    }
+
+    private boolean shouldProcessModule(MavenProject module) {
+        return excludeModules == null || excludeModules.isEmpty() ||
+                excludeModules.stream().noneMatch(module.getArtifactId()::startsWith);
+    }
+
+    private void initializeCheckers(ReportRenderer renderer) {
+        checkers.parallelStream().forEach(checker -> {
             try {
-                String report = future.get();
-                if (!report.isEmpty()) {
-                    content.append(report).append("\n");
+                if (checker instanceof BasicInitializableChecker) {
+                    ((BasicInitializableChecker) checker).init(log, renderer);
+                }
+                if (checker instanceof InitializableChecker) {
+                    ((InitializableChecker) checker).init(log, repoSystem, repoSession, remoteRepositories, renderer);
                 }
             } catch (Exception e) {
-                log.error("❌ Erreur lors de l'exécution d'un checker", e);
+                log.error("❌ Error initializing checker " + checker.getId(), e);
             }
-        }
-
-        return content;
+        });
     }
 
-    /**
-     * Génère le rapport de tous les modules.
-     * @param renderer le moteur de rendu utilisé
-     * @param content le contenu du rapport
-     */
-    private void generateModuleReports(ReportRenderer renderer, StringBuilder content) {
-        List<MavenProject> modules = project.getCollectedProjects();
+    private String generateModuleReport(MavenProject module, ReportRenderer renderer, boolean isParent) {
+        CheckerContext context = new CheckerContext(module, project, propertiesToCheck);
+        StringBuilder report = new StringBuilder();
 
-        ExecutorService executor = Executors.newWorkStealingPool();
+        report.append(renderer.renderHeader2("Module: " + module.getArtifactId()));
 
-        List<Future<StringBuilder>> futures = new ArrayList<>();
-        for (MavenProject module : modules) {
-            futures.add(executor.submit(() -> generateReportContent(module, renderer)));
+        getApplicableCheckers(module, isParent).parallelStream()
+                .map(checker -> runCheckerWithTimeout(checker, context, renderer))
+                .filter(content -> content != null && !content.isEmpty())
+                .forEach(content -> report.append(content).append("\n"));
+
+        return report.toString();
+    }
+
+    private List<CustomChecker> getApplicableCheckers(MavenProject module, boolean isParent) {
+        return checkers.stream()
+                .filter(checker -> runAllCheckers || checkersToRun.contains(checker.getId()))
+                .filter(checker -> isCheckerApplicable(checker, module, isParent))
+                .collect(Collectors.toList());
+    }
+
+    private boolean isCheckerApplicable(CustomChecker checker, MavenProject module, boolean isParent) {
+        String checkerId = checker.getId();
+
+        if (TOP_LEVEL_ONLY_CHECKERS.contains(checkerId) && !isParent) {
+            return false;
         }
 
-        executor.shutdown();
+        if ("interfaceConformity".equals(checkerId) && !module.getArtifactId().endsWith("-api")) {
+            return false;
+        }
 
-        for (Future<StringBuilder> future : futures) {
-            try {
-                content.append(future.get());
-            } catch (Exception e) {
-                log.error("❌ Erreur lors de la génération du rapport de module", e);
+        return true;
+    }
+
+    private String runCheckerWithTimeout(CustomChecker checker, CheckerContext context, ReportRenderer renderer) {
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        Future<String> future = executor.submit(() -> executeChecker(checker, context, renderer));
+
+        try {
+            return future.get(checkerTimeout, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            log.warn("⏱️ Checker timeout: " + checker.getId());
+            future.cancel(true);
+            return renderer.renderParagraph("⏱️ Checker timeout: " + checker.getId());
+        } catch (Exception e) {
+            log.error("❌ Error executing checker " + checker.getId(), e);
+            return renderer.renderParagraph("❌ Error: " + e.getMessage());
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    private String executeChecker(CustomChecker checker, CheckerContext context, ReportRenderer renderer) {
+        try {
+            String report = checker.generateReport(context);
+            if (report.contains("❌") || report.contains("⚠️")) {
+                errorCount.incrementAndGet();
+                if (verbose) {
+                    log.warn("Issue found by " + checker.getId() + " in " +
+                            context.getCurrentModule().getArtifactId());
+                }
             }
+            return report;
+        } catch (Exception e) {
+            log.error("❌ Checker execution failed: " + checker.getId(), e);
+            return renderer.renderError("Checker failed: " + e.getMessage());
         }
-
     }
 
-    /**
-     * Exécute un checker si applicable et retourne son rapport.
-     */
-    private String generateCheckerReport(CustomChecker checker, CheckerContext context) {
-        boolean shouldRun = runAll || (checkersToRun != null && checkersToRun.contains(checker.getId()));
-        if (!shouldRun) return "";
+    private String buildAggregateReport(Map<MavenProject, String> moduleReports, ReportRenderer renderer) {
+        StringBuilder content = new StringBuilder();
 
-        // Sauter les checkers non applicables
-        List<String> topLevelOnlyCheckers = Arrays.asList("expectedModules", "propertyPresence");
-        boolean isTopLevelOnly = topLevelOnlyCheckers.contains(checker.getId()) && !isTopLevelProject(context.getCurrentModule());
-        boolean skipIfNotApi = "interfaceConformity".equals(checker.getId())
-                && !context.getCurrentModule().getArtifactId().endsWith("-api");
+        // Header
+        content.append(renderer.renderHeader1("Module Verification Report"));
+        content.append(renderer.renderParagraph("Date: " +
+                new SimpleDateFormat("dd/MM/yyyy HH:mm:ss").format(new Date())));
+        content.append(renderer.renderParagraph("Project: " + project.getName() +
+                " (" + project.getGroupId() + ":" + project.getArtifactId() + ")"));
 
-        if (isTopLevelOnly || skipIfNotApi) {
-            return ""; // Skip checker if not applicable
+        // Summary
+        if (errorCount.get() > 0) {
+            content.append(renderer.renderHeader2("Summary"));
+            content.append(renderer.renderParagraph("⚠️ " + errorCount.get() + " issues detected"));
+        } else {
+            content.append(renderer.renderParagraph("✅ No issues detected"));
         }
 
-        return checker.generateReport(context);
+        // Parent report first
+        content.append(moduleReports.get(project));
+
+        // Child modules sorted by artifactId
+        moduleReports.entrySet().stream()
+                .filter(e -> e.getKey() != project)
+                .sorted(Comparator.comparing(e -> e.getKey().getArtifactId()))
+                .forEach(e -> content.append(e.getValue()));
+
+        return content.toString();
     }
 
-    /**
-     * Écrit le rapport généré sur disque.
-     * @param content contenu HTML/Markdown/Text du rapport
-     * @throws MojoExecutionException en cas d'erreur de fichier
-     */
-    private void writeReport(String format, String content) throws MojoExecutionException {
-        String ext = format.toLowerCase();
-        if (ext.equals("markdown")) ext = "md";
-
-        File outputDir = new File(project.getBasedir(), "target/checker-reports");
-        if (!outputDir.exists()) outputDir.mkdirs();
-
+    private void writeReportFile(String format, String content) throws MojoExecutionException {
+        String extension = getFileExtension(format);
         String timestamp = new SimpleDateFormat("yyyyMMdd-HHmmss").format(new Date());
-        File outputFile = new File(outputDir, "module-check-report-" + timestamp + "." + ext);
+        File outputFile = new File(reportOutputDirectory, reportFileName + "-" + timestamp + "." + extension);
 
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputFile))) {
-            switch (ext) {
-                case "md":
-                    writer.write("# Rapport de Vérification\n\n");
-                    writer.write(content);
-                    break;
-                case "text":
-                    writer.write(content);
-                    break;
-                case "html":
-                    String css = readResourceAsString();
-                    writer.write("<html><head><meta charset=\"UTF-8\">\n");
-                    writer.write("<title>Rapport de Vérification</title>\n");
-                    writer.write("<style>" + css + "</style></head><body>\n");
-                    writer.write("<h1>Rapport de Vérification</h1>\n");
-                    writer.write(content);
-                    writer.write("</body></html>");
-                    break;
-                default:
-                    log.warn("⚠️ Format inconnu '" + format + "', rapport ignoré.");
-                    return;
-            }
-
-            log.info("📄 Rapport généré : " + outputFile.getAbsolutePath());
-            log.info("👉 file://" + outputFile.getAbsolutePath());
-
+        try (BufferedWriter writer = Files.newBufferedWriter(outputFile.toPath(), StandardCharsets.UTF_8)) {
+            writer.write(formatReportContent(format, content));
+            log.info("📄 Report generated: " + outputFile.getAbsolutePath());
         } catch (IOException e) {
-            throw new MojoExecutionException("❌ Erreur lors de la création du fichier de rapport " + ext, e);
+            throw new MojoExecutionException("❌ Failed to write " + format + " report", e);
         }
     }
 
-    /**
-     * Lit le contenu d'une ressource dans le classpath.
-     *
-     * @return contenu de la ressource
-     * @throws IOException si la ressource est introuvable ou non lisible
-     */
-    private String readResourceAsString() throws IOException {
-        try (InputStream is = getClass().getClassLoader().getResourceAsStream("assets/css/style.css")) {
-            if (is == null) {
-                throw new FileNotFoundException("Le fichier de ressource '" + "assets/css/style.css" + "' est introuvable dans le classpath.");
-            }
-            return new String(is.readAllBytes(), StandardCharsets.UTF_8);
+    private String getFileExtension(String format) {
+        switch (format.toLowerCase()) {
+            case "markdown": return "md";
+            case "text": return "txt";
+            default: return "html";
         }
     }
 
-    /**
-     * Vérifie si le projet courant est un pom parent.
-     */
-    private boolean isParentPom() {
-        return project.getModules() != null && !project.getModules().isEmpty();
+    private String formatReportContent(String format, String content) {
+        switch (format.toLowerCase()) {
+            case "markdown":
+                return "# Verification Report\n\n" + content;
+            case "text":
+                return "VERIFICATION REPORT\n====================\n\n" + content;
+            case "html":
+            default:
+                return "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n" +
+                        "<meta charset=\"UTF-8\">\n" +
+                        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n" +
+                        "<title>Verification Report</title>\n" +
+                        "<style>" + getCss() + "</style>\n</head>\n<body>\n" +
+                        "<h1>Verification Report</h1>\n" + content +
+                        "\n<footer>Generated on " +
+                        new SimpleDateFormat("MM/dd/yyyy 'at' HH:mm:ss").format(new Date()) +
+                        " with module-checker plugin</footer>\n</body>\n</html>";
+        }
     }
 
-    /**
-     * Vérifie si le module passé est le projet racine.
-     */
-    private boolean isTopLevelProject(MavenProject module) {
-        return module.getArtifactId().equals(project.getArtifactId());
+    private String getCss() {
+        try (InputStream is = getClass().getResourceAsStream("/assets/css/style.css")) {
+            return is != null ? new String(is.readAllBytes(), StandardCharsets.UTF_8) : DEFAULT_CSS;
+        } catch (IOException e) {
+            log.warn("⚠️ Could not load CSS, using default style", e);
+            return DEFAULT_CSS;
+        }
     }
 
+    private void handleFailures() throws MojoFailureException {
+        if (failOnError && errorCount.get() > 0) {
+            throw new MojoFailureException("❌ " + errorCount.get() + " errors detected. Check reports for details.");
+        }
+    }
 }
