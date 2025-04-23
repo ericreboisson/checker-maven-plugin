@@ -23,18 +23,16 @@ public class OutdatedDependenciesChecker implements CustomChecker, Initializable
 
     private static final int DEFAULT_TIMEOUT = 30;
     private static final String DEFAULT_IGNORE_SCOPES = "system,test,provided";
-
-    private Log log;
-    private RepositorySystem repoSystem;
-    private RepositorySystemSession session;
-    private List<RemoteRepository> remoteRepositories;
-    private ReportRenderer renderer;
-
     private final boolean skip;
     private final Set<String> ignoreScopes;
     private final Pattern ignoreGroupsPattern;
     private final int timeoutSeconds;
     private final boolean showAll;
+    private Log log;
+    private RepositorySystem repoSystem;
+    private RepositorySystemSession session;
+    private List<RemoteRepository> remoteRepositories;
+    private ReportRenderer renderer;
     private ExecutorService executorService;
 
     public OutdatedDependenciesChecker() {
@@ -250,7 +248,6 @@ public class OutdatedDependenciesChecker implements CustomChecker, Initializable
         final String artifactId;
         final String currentVersion;
         final String latestStable;
-        final String latest;
 
         DependencyInfo(String groupId, String artifactId, String currentVersion,
                        String latestStable, String latest) {
@@ -258,7 +255,6 @@ public class OutdatedDependenciesChecker implements CustomChecker, Initializable
             this.artifactId = artifactId;
             this.currentVersion = currentVersion;
             this.latestStable = latestStable;
-            this.latest = latest;
         }
 
         String getGroupId() {
