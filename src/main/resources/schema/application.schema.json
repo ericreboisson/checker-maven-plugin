@@ -1,0 +1,124 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Schéma de validation pour application.yml",
+  "description": "Vérifie les règles de validation pour les fichiers application.yml",
+  "properties": {
+    "spring": {
+      "type": "object",
+      "required": [
+        "application"
+      ],
+      "properties": {
+        "application": {
+          "type": "object",
+          "required": [
+            "name"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Nom de l'application Spring Boot",
+              "enum": [
+                "@component.name@"
+              ],
+              "errorMessage": {
+                "enum": "La valeur de spring.application.name doit être exactement '@component.name@'"
+              }
+            }
+          }
+        },
+        "graphql": {
+          "type": "object",
+          "properties": {
+            "cors": {
+              "type": "object",
+              "properties": {
+                "allowed-headers": {
+                  "type": "array",
+                  "description": "En-têtes autorisés pour CORS GraphQL",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "TEST",
+                      "TOTO"
+                    ]
+                  },
+                  "errorMessage": {
+                    "items": "Les seules valeurs autorisées pour spring.graphql.cors.allowed-headers sont 'TEST' et 'TOTO'."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "list": {
+      "type": "object",
+      "properties": {
+        "of": {
+          "type": "object",
+          "properties": {
+            "simple-values": {
+              "type": "array",
+              "description": "Liste de valeurs simples",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "valeur1",
+                  "valeur2",
+                  "valeur3"
+                ]
+              },
+              "errorMessage": {
+                "items": "Les seules valeurs autorisées pour list.of.simple-values sont 'valeur1', 'valeur2' et 'valeur3'."
+              }
+            }
+          }
+        }
+      }
+    },
+    "custom": {
+      "type": "object",
+      "properties": {
+        "nested-config": {
+          "type": "object",
+          "properties": {
+            "level1": {
+              "type": "object",
+              "properties": {
+                "level2": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string",
+                      "enum": [
+                        "${tag.env.custom.nested-config.level1.level2.value}"
+                      ],
+                      "errorMessage": {
+                        "enum": "La valeur de custom.nested-config.level1.level2.value doit être exactement '${tag.env.custom.nested-config.level1.level2.value}'."
+                      }
+                    }
+                  },
+                  "required": [
+                    "value"
+                  ]
+                }
+              },
+              "required": [
+                "level2"
+              ]
+            }
+          },
+          "required": [
+            "level1"
+          ]
+        }
+      },
+      "required": [
+        "nested-config"
+      ]
+    }
+  },
+  "additionalProperties": true
+}

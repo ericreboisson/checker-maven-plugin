@@ -10,3 +10,4 @@ org.elitost.maven.plugins.checkers.UrlChecker
 org.elitost.maven.plugins.checkers.RedefinedDependencyVersionChecker
 org.elitost.maven.plugins.checkers.InterfaceConformityChecker
 org.elitost.maven.plugins.checkers.PropertyRedefinitionChecker
+org.elitost.maven.plugins.checkers.YamlSchemaValidatorChecker
